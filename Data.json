@@ -1,0 +1,67 @@
+{
+    "Art prompts": [
+        "something that you shoudnt DIY",
+        "a Frend",
+        "if not frend, why frend shaped",
+        "Goose",
+        "Chocky milk",
+        "The Brain",
+        "the Exchange",
+        "The little hut in the woods",
+        "The Gardien",
+        "Your dream Garden",
+        "Your dream House",
+        "Your Spaceship",
+        "Me, draw me :)",
+        "the man in the middle",
+        "your most pety crime",
+        "The laughing villan",
+        "The unsucessfull, but cute, Worker",
+        "a bread upon thy",
+        "your favorite meme"
+    ],
+    "Swears": [
+        "Fuck you",
+        "you look like a pealed banana",
+        "you look like scheisse today",
+        "your more anoying than the pigeon on my neck!",
+        "not even a pig would eat you",
+        "not even I would eat you",
+        "your a Grill",
+        "you stink"
+    ],
+    "complement": [
+        "you smell nice",
+        "i love you",
+        "you are Beautifull",
+        "you make me un poko loco",
+        "you make me smile :)",
+        "the moment i saw you, my day improved",
+        "You have beautiful retinas",
+        "\u201eYou have beautiful retinas\u201c",
+        "You have beautiful retinas"
+    ],
+    "Random": [
+        "sometimes i dream about Chees",
+        "One life, it worth the atempt",
+        "there are more plans in the ocean than submariens in the Sky",
+        "The moment I understood the weakness of my flesh, it degusted me. I jeered the strength an serenity of Stone.",
+        "Adi ist ein Idiot",
+        "Sleep is for the weak"
+    ],
+    "help": [
+        "my Commands are:\n",
+        "$hello | I say hello to you\n",
+        "$name | I'll introduce myself\n",
+        "$CreateQR | It creates a QR code from your input\n",
+        "$Meme | i show you a random meme i stole of reddit\n",
+        "$Mp3 | if you put a Youtube link behind that, i'll get you the mp3 file from that\n",
+        "$prompt | I'll give you an art prompt\n",
+        "$compliment | I'll give you a compliment\n",
+        "$fuckyou | You get what you deserve\n",
+        "$addCompliment | I learn a compliment from you\n",
+        "$addRandom | I learn something random from you\n",
+        "$addSwear | I learn a swear from you\n",
+        "$addPrompt | I take an art prompt from you"
+    ]
+}
