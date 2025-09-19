@@ -5,11 +5,28 @@ def toMp3(url):
     try:
         ydl_opts = {
                 'format': 'bestaudio/best',
-                'postprocessors': [{
+                'postprocessors': [
+                {
                         'key': 'FFmpegExtractAudio',
                         'preferredcodec': 'mp3',
-                        'preferredquality': '192'
-                }],
+                        'preferredquality': '0'
+                },
+                { 
+                    "key": "FFmpegThumbnailsConvertor",
+                    "format": "jpg",
+                },
+                {
+                    "key": "EmbedThumbnail",
+                },
+                {  # Übernehme Metadaten (Titel, Artist usw.)
+                    "key": "FFmpegMetadata",
+                },
+            ],
+            "writethumbnail": True,
+            "addmetadata": True,
+            "postprocessor_args": {
+                "EmbedThumbnail": ["-id3v2_version", "3"]
+            }
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
