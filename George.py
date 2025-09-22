@@ -200,10 +200,13 @@ async def on_message(message):
     if message.content.startswith('$Meme'):
         sub = random.choice(subs)
         download_random_media(sub) #downloads a random post from a given subreddit 
-        fille = find_file("leMeme", "./media")
-        await message.channel.send(f"Hier is a meme, just for you :) i got if from r/{sub}", file =discord.File(f"./media/{fille}"))
-        del_file(f"./media/{fille}")
-
+        try:
+            fille = find_file("leMeme", "./media")
+            await message.channel.send(f"Hier is a meme, just for you :) i got if from r/{sub}", file =discord.File(f"./media/{fille}"))
+            del_file(f"./media/{fille}")
+        except:
+            await message.channel.send(f"Something went wrong with the Meme. :(")
+        
     # QR code creation
     if message.content.startswith('$CreateQR'):
         prompt_text = message.content[len('$CreateQR '):]
