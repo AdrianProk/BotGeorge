@@ -4,7 +4,7 @@ import random
 import segno
 import os
 
-from requestTest import download_random_media
+from memeRequest import download_random_media
 from youtube import toMp3
 
 intents = discord.Intents.default()
