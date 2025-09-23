@@ -29,11 +29,6 @@ client = discord.Client(intents=intents)
 subs = ["Animemes","anime_irl","hopeposting","meme","me_irl","girlsfrontline","GFLNeuralCloud","FunnyAnimals"]
 
 #--------------------------------------------------------------
-#ToDo:
-#die Meme funktion gibt nur video's ohne ton aus. das muss gefixt werden.
-#die PDF funktion einbauen.
-#die MP3 funktion fügt noch kein Album picture hinzu.
-#--------------------------------------------------------------
 
 def get_prompt():
     prompt = read_from_json_random("Art prompts")
