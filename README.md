@@ -1,14 +1,27 @@
 # BotGeorge
-A small Discord Bot, that has many fun and usefull features like: a Youtube-mp3 converter, QR code creater, promt giver, ...
 
-Funtions:
-All the funktionalitys are accesed by typing into the Discord Chatt the '$' character followed by a comand. 
+A Discord bot implemented in Python using [discord.py](https://discordpy.readthedocs.io/).  
+The project demonstrates the integration of external APIs, media handling, and dynamic user interaction.
 
-'$Mp3 -Youtube link-'
-- He can convert Youtube videos to a .mp3 file
+---
 
-'$CreateQR -Content of QR code-' 
-- He can create a QR code with the content of your choosing
+## Features
 
-'$prompt'
-- He can give you an art p
+The bot supports multiple commands for entertainment and interaction:
+
+| Command           | Description                                            |
+|-------------------|--------------------------------------------------------|
+| `$hello`          | Replies with a greeting                                |
+| `$name`           | Introduces the bot                                     |
+| `$CreateQR`       | Generates a QR code from user input                    |
+| `$Meme`           | Retrieves and displays a random meme from Reddit       |
+| `$Mp3 <link>`     | Extracts the audio (MP3) from a given YouTube link     |
+| `$prompt`         | Provides a random art prompt                           |
+| `$compliment`     | Sends a compliment                                     |
+| `$fuckyou`        | Sends an offensive response (for testing purposes)     |
+| `$addCompliment`  | Allows users to add new compliments                    |
+| `$addRandom`      | Allows users to add random phrases                     |
+| `$addSwear`       | Allows users to add new swear words                    |
+| `$addPrompt`      | Allows users to add new art prompts                    |
+
+---
