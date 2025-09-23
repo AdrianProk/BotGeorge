@@ -25,3 +25,10 @@ The bot supports multiple commands for entertainment and interaction:
 | `$addPrompt`      | Allows users to add new art prompts                    |
 
 ---
+
+### 2. Install dependencies
+Make sure Python 3.10+ is installed. Then install the required packages:
+
+```bash
+pip install -r requirements.txt
+

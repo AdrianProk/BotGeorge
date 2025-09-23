@@ -1,0 +1,4 @@
+discord.py>=2.3.2
+segno>=1.6.1
+yt-dlp>=2024.3.10
+requests>=2.31.0
