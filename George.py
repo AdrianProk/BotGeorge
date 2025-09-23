@@ -7,6 +7,17 @@ import os
 from memeRequest import download_random_media
 from youtube import toMp3
 
+#get discort token form a json file, for privacy reasons
+def get_token():
+    try:
+        with open("token.json") as tfile:
+            tokenconfig = json.load(tfile)
+        return tokenconfig["discordToken"]
+    except:
+        print("Couldn't read token file!----------")
+
+token = get_token()
+
 intents = discord.Intents.default()
 intents.messages = True  
 intents.message_content = True
@@ -238,4 +249,4 @@ async def on_message(message):
         help = get_help()
         await message.channel.send(help)
 
-client.run('Mzk2NzMyMzM2OTQwNjQ2NDEw.G-vg5S.hMy-Q1Tijogz7nLuk6hjaClpQIzj1-16e7dlO8')  
+client.run(token)  
