@@ -7,10 +7,13 @@ import os
 from memeRequest import download_random_media
 from youtube import toMp3
 
+baseDir = os.path.dirname(__file__)
+
 #get discort token form a json file, for privacy reasons
 def get_token():
+    tokenPath = os.path.join(baseDir, "data", "token.json")
     try:
-        with open("token.json") as tfile:
+        with open(tokenPath) as tfile:
             tokenconfig = json.load(tfile)
         return tokenconfig["discordToken"]
     except:
@@ -57,8 +60,9 @@ def get_help():
 #----------------------------------------------------------
 
 def read_from_json(list_name):
+    pathToFile = os.path.join(baseDir, "data", "Data.json")
     try: 
-        with open("Data.json",'r') as file:
+        with open(pathToFile,'r') as file:
             coollist = json.load(file)
     except (FileNotFoundError, json.JSONDecodeError):
         print("File Not Found")
@@ -69,8 +73,9 @@ def read_from_json(list_name):
         print("List not in json")
 
 def read_from_json_random(list_name):
+    pathToFile = os.path.join(baseDir, "data", "Data.json")
     try:
-        with open("Data.json",'r') as file:
+        with open(pathToFile,'r') as file:
             coollist = json.load(file)
     except (FileNotFoundError, json.JSONDecodeError):
         print("File Not Found")
@@ -79,8 +84,9 @@ def read_from_json_random(list_name):
         return random.choice(coollist[list_name])
 
 def write_to_json(data,list_name):
+    pathToFile = os.path.join(baseDir, "data", "Data.json")
     try:
-        with open("Data.json", 'r') as file:
+        with open(pathToFile, 'r') as file:
             coollist = json.load(file)
     except (FileNotFoundError, json.JSONDecodeError):
         coollist = {
@@ -96,7 +102,7 @@ def write_to_json(data,list_name):
         print("Error: no such list in json")
         return
     
-    with open("Data.json", 'w') as file:
+    with open(pathToFile, 'w') as file:
         json.dump(coollist, file, indent=4)
         print(f"{data} was added to list {list_name}")
 
