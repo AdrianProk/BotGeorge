@@ -4,8 +4,8 @@ import random
 import segno
 import os
 
-from memeRequest import download_random_media
-from youtube import toMp3
+from modules.memeRequest import download_random_media
+from modules.youtube import toMp3
 
 baseDir = os.path.dirname(__file__)
 
