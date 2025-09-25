@@ -18,7 +18,7 @@ def toMp3(url):
                 {
                     "key": "EmbedThumbnail",
                 },
-                {  # Übernehme Metadaten (Titel, Artist usw.)
+                {  
                     "key": "FFmpegMetadata",
                 },
             ],
