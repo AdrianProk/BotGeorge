@@ -3,6 +3,7 @@ import json
 import random
 import segno
 import os
+import asyncio
 
 from modules.memeRequest import download_random_media
 from modules.youtube import toMp3
@@ -211,7 +212,9 @@ async def on_message(message):
     # posting memes
     if message.content.startswith('$Meme'):
         sub = random.choice(subs)
-        download_random_media(sub) #downloads a random post from a given subreddit 
+        await asyncio.to_thread(
+            download_random_media(sub) #downloads a random post from a given subreddit 
+        )
         try:
             fille = find_file("leMeme", "./media")
             await message.channel.send(f"Hier is a meme, just for you :) i got if from r/{sub}", file =discord.File(f"./media/{fille}"))
@@ -224,7 +227,9 @@ async def on_message(message):
         prompt_text = message.content[len('$CreateQR '):]
 
         if prompt_text.strip():
-            generateQR(prompt_text)
+            await asyncio.to_thread(
+                generateQR(prompt_text)
+            )
             await message.channel.send("Hier is your QR code :)", file=discord.File('./qr.png'))
         else:
             await message.channel.send("Please put something behind $CreateQR or else i can't put something in it")
@@ -235,7 +240,9 @@ async def on_message(message):
 
         if(message.content.startswith('$Mp3 https://www.youtube.com/watch?v')):
             await message.channel.send("Alright, give me a moment...... ")
-            filename = toMp3(prompt_text)
+            await asyncio.to_thread(
+                filename = toMp3(prompt_text)
+            ) 
             filename = './'+filename
             try:
                 await message.channel.send("Hier is your Mp3 :)",file=discord.File(filename))
