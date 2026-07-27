@@ -6,7 +6,7 @@ import pandas as pd
 # Damit das script funktioniert muss man zuerst ollama starten.
 
 
-modelName = 'testbro'
+modelName = 'gemma3:12b'
 log = [] #Chatlog Array
 
 df = pd.DataFrame(log)

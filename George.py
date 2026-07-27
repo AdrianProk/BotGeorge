@@ -240,18 +240,23 @@ async def on_message(message):
     if message.content.startswith('$Mp3'):
         prompt_text = message.content[len('$Mp3 '):]
 
-        if(message.content.startswith('$Mp3 https://www.youtube.com/watch?v')):
+        if prompt_text.startswith('https://www.youtube.com/watch?v') or prompt_text.startswith('https://youtu.be/'):
             await message.channel.send("Alright, give me a moment...... ")
             filename = await asyncio.to_thread(
                 toMp3,
                 prompt_text
-            ) 
-            filename = './'+filename
-            try:
-                await message.channel.send("Hier is your Mp3 :)",file=discord.File(filename))
-            except:
-                await message.channel.send("I think your Mp3 fiel was to big for Discord :(")
-            os.remove(filename)
+            )
+
+            if isinstance(filename, str) and filename and os.path.exists(filename):
+                try:
+                    await message.channel.send("Hier is your Mp3 :)", file=discord.File(filename))
+                except Exception:
+                    await message.channel.send("I think your Mp3 file was too big for Discord :(")
+                finally:
+                    if os.path.exists(filename):
+                        os.remove(filename)
+            else:
+                await message.channel.send("The MP3 download failed. The link may be invalid or YouTube blocked the request.")
         else:
             await message.channel.send("Please put a valid Youtube link behind $Mp3")
 
