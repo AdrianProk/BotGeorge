@@ -68,7 +68,7 @@ are out of scope here. The plan does set up the architecture for them (see §6).
     - Every `git pull` on the server conflicts with or overwrites what users added.
     - The `help` text lives in the data file and drifts from the real commands.
     - Duplicates are not prevented (`"You have beautiful retinas"` is stored 3×).
-17. **No record of who added what.** Entries store no author, guild or timestamp, so a moderator can't find or remove an abusive entry. All content is global, so text added in one server shows up in every server. Input length isn't limited, so messages over 2000 characters fail to send.
+17. **No record of who added what.** Entries store no author, origin server or timestamp, so nobody can find or remove an abusive entry. Content is shared across all servers (that's intended, see §7), so one bad entry reaches every server. Input length isn't limited, so messages over 2000 characters fail to send.
 18. **Logging is only `print`.** There are no log levels or tracebacks, and nothing can be inspected after a crash.
 19. **Dependencies are unpinned** (`>=` only, no lockfile). `ffmpeg` is a required system dependency but is not documented. Recent `yt-dlp` releases also expect an external JavaScript runtime (Deno) for full YouTube support.
 20. **The process runs on import.** `client.run(token)` and `get_token()` run at import time with no `if __name__ == "__main__":` guard, so the module can't be imported for tests.
@@ -149,7 +149,7 @@ Each phase leaves the bot working and can ship on its own.
 
 ### Phase 2: Skeleton: config, logging, bot class, cogs (≈ 1 day)
 - [ ] `config.py` reads settings from the environment or `.env`:
-  `DISCORD_TOKEN` (required, fail fast with a clear message), `DATA_DIR`, `LOG_LEVEL`, `COMMAND_PREFIX` (default `$`), `SUBREDDITS`, `MP3_MAX_DURATION_S`, `MP3_MAX_CONCURRENT`, `MEME_MAX_BYTES`.
+  `DISCORD_TOKEN` (required, fail fast with a clear message), `DATA_DIR`, `LOG_LEVEL`, `COMMAND_PREFIX` (default `$`), `OWNER_IDS`, `GUILD_IDS`, `SUBREDDITS`, `MP3_MAX_DURATION_S`, `MP3_MAX_CONCURRENT`, `MEME_MAX_BYTES`.
   Keep reading `data/token.json` as a deprecated fallback for one release.
 - [ ] `logging_setup.py`: use `discord.utils.setup_logging()` plus a `george` logger, logging to stdout in Docker and optionally to a rotating file. Replace every `print`.
 - [ ] `GeorgeBot(commands.Bot)`, where `setup_hook()` opens the DB, creates one shared `aiohttp.ClientSession`, and loads the cogs. `close()` disposes of them.
@@ -196,24 +196,28 @@ Each phase leaves the bot working and can ship on its own.
   ```sql
   CREATE TABLE entries (
       id          INTEGER PRIMARY KEY,
-      guild_id    INTEGER,              -- NULL = global seed content
+      origin_guild_id INTEGER,          -- server it was added from (info/moderation only; NULL = seed)
       category    TEXT NOT NULL CHECK (category IN ('prompt','swear','compliment','random')),
       text        TEXT NOT NULL,
       author_id   INTEGER,              -- NULL for seed data
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE (guild_id, category, text)
+      UNIQUE (category, text)           -- one shared list per category, no duplicates across servers
   );
-  CREATE INDEX idx_entries_lookup ON entries (category, guild_id);
+  CREATE INDEX idx_entries_category ON entries (category);
   CREATE TABLE schema_version (version INTEGER NOT NULL);
   ```
 - [ ] `aiosqlite`, with WAL mode and one connection owned by the bot. SQLite handles atomic writes, so no more corruption or races.
-- [ ] Random pick: `SELECT text FROM entries WHERE category=? AND (guild_id IS NULL OR guild_id=?) ORDER BY random() LIMIT 1`. This is fine at this data size. If the list is empty, reply "I don't know any yet, teach me with /add…".
-- [ ] One-time import: copy `seed/content.json` (today's `Data.json`, de-duplicated, without `help`) as global entries **plus** a migration of the live server's current `Data.json`, so nothing users have added is lost.
+- [ ] **Content is shared between all servers** (decided): random pick is `SELECT text FROM entries WHERE category=? ORDER BY random() LIMIT 1`, with no server filter. This is fine at this data size. If the list is empty, reply "I don't know any yet, teach me with /add…".
+- [ ] One-time import: copy `seed/content.json` (today's `Data.json`, de-duplicated, without `help`) as seed entries **plus** a migration of the live server's current `Data.json`, so nothing users have added is lost.
 - [ ] Input rules: strip whitespace, 1–300 characters, reject duplicates with a friendly message, no mention parsing (already covered by the global `allowed_mentions`).
-- [ ] New moderator commands (`manage_messages` permission): `/content list <category>`, `/content remove <id>`. Moderators need these to clean up abusive entries.
+- [ ] Moderation commands: `/content list <category>`, `/content remove <id>`. Because the list is shared, deleting an entry removes it **in every server**, so who may delete is limited:
+  - the **bot owner** (`OWNER_IDS` in `.env`, checked with `commands.is_owner()`): can delete anything;
+  - the entry's **author**: can delete their own entries;
+  - **server moderators** (`manage_messages`): can delete only entries added from *their* server (`origin_guild_id`).
+- [ ] Optional: send every new entry to a private owner log channel (text, author, server), so abusive additions get noticed quickly.
 - [ ] Back up `/data/george.db` with SQLite `.backup` from a cron/systemd timer or a small in-bot `tasks.loop`, and keep N copies.
 
-**Done when:** killing the process during `$addPrompt` never corrupts data, entries record author and guild, and a moderator can remove an entry.
+**Done when:** killing the process during `$addPrompt` never corrupts data, entries record author and origin server, all servers see the same lists, and the owner or the author can remove an entry.
 
 ### Phase 5: Testing & CI (≈ 1 day, can run alongside Phases 3–4)
 - [ ] Unit tests (no network):
@@ -251,7 +255,7 @@ Each phase leaves the bot working and can ship on its own.
 **Operations (both options)**
 - [ ] **Health:** log `on_ready`, `on_disconnect` and `on_resumed`. Add a heartbeat file for the Docker `HEALTHCHECK`. Optionally send errors to a private Discord channel or webhook.
 - [ ] **Graceful shutdown:** on SIGTERM/Ctrl+C, stop accepting new MP3 jobs, let running ones finish (with a timeout), then close the DB and HTTP session.
-- [ ] **Discord application settings:** enable the Message Content intent. A private bot in fewer than 100 servers needs no verification for it, so `$` prefix commands can stay long-term alongside slash commands. Register slash commands to your server (`tree.copy_global_to(guild)` + `sync(guild=…)`) so changes appear instantly. Invite the bot with: Send Messages, Attach Files, Embed Links, Use Application Commands. In the Developer Portal, turn off "Public Bot" so only you can add it to servers.
+- [ ] **Discord application settings:** enable the Message Content intent. A private bot in fewer than 100 servers needs no verification for it, so `$` prefix commands can stay long-term alongside slash commands. Register slash commands to each of your servers (`GUILD_IDS` in `.env`, then `tree.copy_global_to(guild)` + `sync(guild=…)` per server) so changes appear instantly. Invite the bot with: Send Messages, Attach Files, Embed Links, Use Application Commands. In the Developer Portal, turn off "Public Bot" so only you can add it to servers.
 - [ ] **Release process:** semantic version in `pyproject.toml`, git tags, and a CHANGELOG.
 
 **Done when:** on a machine that has never run the bot, `.env` + `data/` + `docker compose up -d` (or `uv run python -m george`) brings it up with all content intact, it restarts by itself after a crash, and the same image runs on x86 and ARM.
@@ -278,7 +282,7 @@ Total: about **5–7 focused days**. Phases 3, 4 and 5 can be split into one PR 
 
 **Better multi-user support**
 - Per-job temp dirs, semaphores, per-user cooldowns and `max_concurrency` (Phase 3) already remove the race conditions that hit concurrent users.
-- `guild_id` and `author_id` on every entry (Phase 4) enable per-server libraries, "my entries", per-user favourites and moderation without another migration.
+- `author_id` and `origin_guild_id` on every entry (Phase 4) enable "my entries", per-user favourites, stats per server and moderation without another migration.
 - Slash commands (Phase 2) allow ephemeral replies, autocomplete, and per-command permissions set by server admins.
 - Later options: a job queue with position feedback for MP3s, and per-guild settings (enabled commands, subreddit list, NSFW policy) in a `guild_settings` table.
 
@@ -314,6 +318,6 @@ Simpler fallback for **Option B (no Docker)**: a scheduled `uv lock --upgrade-pa
 | Audience | **Private** server | Message Content intent needs no verification, so `$` commands stay. "Public Bot" turned off. ToS risk of `$Mp3` is accepted. Reddit OAuth is recommended but not required. |
 | Hosting | **Portable** | Phase 6: Docker multi-arch image (Option A) plus plain-Python fallback (Option B). All state in `data/`, all config in `.env`. |
 | `$` prefix | Keep, alongside slash commands (hybrid) | Phase 2 as written |
+| Content scope | **Shared between all servers** (today's behaviour) | Phase 4: one list per category, `UNIQUE (category, text)`, no server filter. Origin server is stored for moderation only. Deleting is limited to owner, author, or mods of the origin server. Slash commands synced to every server in `GUILD_IDS`. |
 
-**Still open**
-1. **Is the bot in one server or several?** If it's only ever in your one server, content scope doesn't matter: keep today's behaviour (everything shared). The `guild_id` column is still stored so it can be switched later. If it's in several servers, decide between `CONTENT_SCOPE=global` (today: added text appears everywhere) and `CONTENT_SCOPE=guild` (each server sees the shared seed list plus only its own additions).
+No open questions remain. The plan is ready to implement, starting with Phase 0.
