@@ -227,19 +227,34 @@ Each phase leaves the bot working and can ship on its own.
 - [ ] GitHub Actions: `ruff check`, `ruff format --check`, `pytest` on push/PR. Docker build on main.
 - [ ] Dependabot (or Renovate) for pip and GitHub Actions. This is also the first step toward automatic yt-dlp updates (§6).
 
-### Phase 6: Packaging, deployment & operations (≈ ½–1 day)
-- [ ] **Dockerfile:** `python:3.12-slim`, `apt-get install ffmpeg`, install Deno (the JS runtime yt-dlp uses for YouTube), install from the lockfile, run as a non-root user, `WORKDIR /app`, `VOLUME /data`, `CMD ["python", "-m", "george"]`.
-- [ ] **compose.yaml:** `restart: unless-stopped`, `env_file: .env`, named volume `george-data:/data`, memory/CPU limits (ffmpeg can spike), log rotation (`logging.options.max-size`).
-- [ ] The alternative without Docker: a systemd unit (`Restart=on-failure`, `EnvironmentFile=`, `WorkingDirectory=`, a dedicated user).
-- [ ] **Health:** log `on_ready`, `on_disconnect` and `on_resumed`. Optionally a heartbeat file or tiny HTTP `/healthz` for Docker `HEALTHCHECK`, and alerts from errors to a private Discord webhook/channel.
-- [ ] **Graceful shutdown:** on SIGTERM, stop accepting new MP3 jobs, let running ones finish (with a timeout), then close the DB and HTTP session.
-- [ ] **Discord application settings:**
-  - Enable the Message Content intent while `$` prefix commands are still supported.
-  - Plan to drop prefix commands and that intent later.
-  - Invite the bot with least-privilege permissions: Send Messages, Attach Files, Embed Links, Use Application Commands.
-- [ ] **Release process:** semantic version in `pyproject.toml`, git tags, and a CHANGELOG. Deploy = `docker compose pull && docker compose up -d`.
+### Phase 6: Portable packaging, deployment & operations (≈ 1 day)
 
-**Done when:** the server can be rebuilt from scratch with `git clone` + `.env` + `docker compose up -d`, the bot restarts by itself after a crash, and data survives redeploys.
+**Goal: the bot runs the same way on any machine** (Windows PC, Linux server, Raspberry Pi, Mac, cloud VPS). Moving it means copying two things: the `.env` file and the `data/` folder.
+
+**Portability rules (apply from Phase 2 onward)**
+- [ ] All paths come from `config.DATA_DIR` and `pathlib.Path`. No hard-coded `./`, no `os.getcwd()` assumptions, no Windows-only code (e.g. the cp1252 console workaround).
+- [ ] **All state goes in one folder:** `DATA_DIR/` holds `george.db`, `backups/` and `logs/`, and temporary files go to the OS temp dir. Backup or move = copy that folder.
+- [ ] **All config goes in `.env`**, with `.env.example` committed. Nothing machine-specific lives in the code or the repo.
+
+**Option A: Docker (recommended; identical on every OS)**
+- [ ] **Dockerfile:** `python:3.12-slim`, `apt-get install ffmpeg`, install Deno (the JS runtime yt-dlp uses for YouTube), install from the lockfile, run as a non-root user, `WORKDIR /app`, `VOLUME /data`, `CMD ["python", "-m", "george"]`.
+  ffmpeg and Deno are inside the image, so the host only needs Docker.
+- [ ] **Multi-arch image** (`linux/amd64` + `linux/arm64`) built by GitHub Actions with `docker buildx` and pushed to GitHub Container Registry (GHCR, `ghcr.io/adrianprok/botgeorge`), so a Raspberry Pi, a normal PC or a VPS can pull the same tag.
+- [ ] **compose.yaml:** `image: ghcr.io/…:latest` (with `build: .` as fallback), `restart: unless-stopped`, `env_file: .env`, `./data:/data` bind mount (easy to find and copy), memory/CPU limits (ffmpeg can spike), log rotation (`logging.options.max-size`).
+- [ ] Deploy on any host: `git clone` (or just download `compose.yaml` + `.env.example`), fill in `.env`, `docker compose up -d`.
+
+**Option B: Plain Python (no Docker)**
+- [ ] Run with `uv run python -m george` (or `pip install .`) on Windows, macOS and Linux.
+- [ ] At startup the bot checks for `ffmpeg` and `deno` on `PATH` (`shutil.which`) and exits with a clear install hint if one is missing. The README lists the install command per OS (`winget`, `brew`, `apt`).
+- [ ] Optional service files in `deploy/`: a systemd unit for Linux (`Restart=on-failure`, `EnvironmentFile=`) and a short Windows Task Scheduler / NSSM note.
+
+**Operations (both options)**
+- [ ] **Health:** log `on_ready`, `on_disconnect` and `on_resumed`. Add a heartbeat file for the Docker `HEALTHCHECK`. Optionally send errors to a private Discord channel or webhook.
+- [ ] **Graceful shutdown:** on SIGTERM/Ctrl+C, stop accepting new MP3 jobs, let running ones finish (with a timeout), then close the DB and HTTP session.
+- [ ] **Discord application settings:** enable the Message Content intent. A private bot in fewer than 100 servers needs no verification for it, so `$` prefix commands can stay long-term alongside slash commands. Register slash commands to your server (`tree.copy_global_to(guild)` + `sync(guild=…)`) so changes appear instantly. Invite the bot with: Send Messages, Attach Files, Embed Links, Use Application Commands. In the Developer Portal, turn off "Public Bot" so only you can add it to servers.
+- [ ] **Release process:** semantic version in `pyproject.toml`, git tags, and a CHANGELOG.
+
+**Done when:** on a machine that has never run the bot, `.env` + `data/` + `docker compose up -d` (or `uv run python -m george`) brings it up with all content intact, it restarts by itself after a crash, and the same image runs on x86 and ARM.
 
 ---
 
@@ -253,7 +268,7 @@ Each phase leaves the bot working and can ship on its own.
 | 3 | Feature correctness & concurrency | 1–2 days | 2 |
 | 4 | SQLite persistence | 1 day | 2 |
 | 5 | Tests & CI | 1 day | 2 (alongside 3/4) |
-| 6 | Docker / deploy / ops | ½–1 day | 2 |
+| 6 | Portable packaging (Docker multi-arch + plain Python) / ops | 1 day | 2 |
 
 Total: about **5–7 focused days**. Phases 3, 4 and 5 can be split into one PR per feature.
 
@@ -267,22 +282,38 @@ Total: about **5–7 focused days**. Phases 3, 4 and 5 can be split into one PR 
 - Slash commands (Phase 2) allow ephemeral replies, autocomplete, and per-command permissions set by server admins.
 - Later options: a job queue with position feedback for MP3s, and per-guild settings (enabled commands, subreddit list, NSFW policy) in a `guild_settings` table.
 
-**Automatic YouTube library (yt-dlp) updates**
-- yt-dlp has to be updated often because YouTube changes all the time. Phases 1, 5 and 6 make updates *safe*: pinned versions in a lockfile, tests around the wrapper, and reproducible Docker images.
-- Recommended approach, in order of preference:
-  1. Dependabot/Renovate opens a daily PR for `yt-dlp`, CI runs the tests, the PR auto-merges, and a scheduled workflow rebuilds and redeploys the image.
-  2. A nightly scheduled image rebuild that always pulls the latest `yt-dlp` (plus Deno and ffmpeg), with an automatic restart.
-  3. *(Avoid if possible)* Self-update at runtime with `pip install -U yt-dlp` and a module reload. It's fragile, can't be reproduced, and can't be rolled back.
-- `services/youtube.py` is the only module that imports `yt_dlp`, so the update mechanism can't break anything else. A canary test (convert a short known-good video) can run before each deployment.
+**Keeping yt-dlp up to date automatically** (confirmed goal)
 
-If "YouTube library" instead means a **music library the bot builds up** (e.g. watching channels or playlists for new uploads), the same structure fits: add a `tasks.loop` in a new cog, store tracked sources and downloaded items in SQLite, and reuse `services/youtube.py`.
+yt-dlp needs frequent updates because YouTube keeps changing. When it's outdated, `$Mp3` breaks with "Sign in to confirm…", "nsig extraction failed" or HTTP 403 errors. Phases 1, 5 and 6 make updates *safe*: a lockfile, tests around the wrapper, and a portable image. `services/youtube.py` is the only module that imports `yt_dlp`, so an update can't break anything else.
+
+Recommended pipeline, which fits the portable Docker setup:
+1. **Dependabot** checks `yt-dlp` **daily** and opens a PR that bumps the lockfile.
+2. **CI** runs the unit tests and a **canary job** that converts one short, known-good public video with the new version.
+3. If CI is green, the PR **auto-merges** (GitHub auto-merge, limited to `yt-dlp` patch/minor bumps).
+4. The merge triggers the **multi-arch image build** and pushes `ghcr.io/…:latest` plus a dated tag.
+5. On the host, a **scheduled job pulls the new image and restarts** the bot: `docker compose pull && docker compose up -d`, run from cron, a systemd timer or Windows Task Scheduler (`deploy/update.sh` / `update.ps1`). This keeps the host side portable.
+6. **Rollback:** pin the previous dated tag in `compose.yaml`.
+
+Safety nets inside the bot:
+- Map the typical "outdated extractor" errors to a clear message ("YouTube changed something, an update is on its way") and alert the owner channel.
+- A `$version` command shows the bot, yt-dlp and ffmpeg versions, so you can see whether an update has landed.
+- Ship Deno in the image, because newer yt-dlp versions need a JS runtime for YouTube.
+
+Simpler fallback for **Option B (no Docker)**: a scheduled `uv lock --upgrade-package yt-dlp && uv sync`, then a restart. Or upgrade yt-dlp in the start script before launching. It's less reproducible, but fine for a private bot.
+
+*(Avoid:* `pip install -U` and reloading the module while the bot is running. It's fragile and can't be rolled back.)
 
 ---
 
-## 7. Open questions
+## 7. Decisions & open questions
 
-1. **Hosting target:** a home server/Raspberry Pi, a VPS, or a container platform? This decides Docker vs systemd and whether ARM images are needed.
-2. **Public or private bot?** If public, YouTube-to-MP3 conflicts with YouTube's Terms of Service and the Reddit scraping needs OAuth. For a private friends' server, the risk is much lower.
-3. **Global vs per-server content:** should text added in one server stay visible in all servers (today's behaviour), or should each server have its own list on top of the shared seed content?
-4. **Keep `$` prefix commands long-term,** or move fully to slash commands and drop the Message Content intent?
-5. **Interpretation check:** does "updates its YouTube library automatically" mean keeping **yt-dlp** updated, or automatically **downloading new videos** from channels/playlists? §6 covers both.
+**Decided**
+| Topic | Decision | Effect on the plan |
+|---|---|---|
+| "YouTube library" | Means keeping **yt-dlp** up to date | §6 pipeline: Dependabot → CI canary → auto-merge → image build → scheduled pull |
+| Audience | **Private** server | Message Content intent needs no verification, so `$` commands stay. "Public Bot" turned off. ToS risk of `$Mp3` is accepted. Reddit OAuth is recommended but not required. |
+| Hosting | **Portable** | Phase 6: Docker multi-arch image (Option A) plus plain-Python fallback (Option B). All state in `data/`, all config in `.env`. |
+| `$` prefix | Keep, alongside slash commands (hybrid) | Phase 2 as written |
+
+**Still open**
+1. **Is the bot in one server or several?** If it's only ever in your one server, content scope doesn't matter: keep today's behaviour (everything shared). The `guild_id` column is still stored so it can be switched later. If it's in several servers, decide between `CONTENT_SCOPE=global` (today: added text appears everywhere) and `CONTENT_SCOPE=guild` (each server sees the shared seed list plus only its own additions).
