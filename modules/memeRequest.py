@@ -9,6 +9,10 @@ def download_random_media(subreddit, download_folder="media"):
     if response.status_code == 200:
         data = response.json()
         post = data[0]["data"]["children"][0]["data"]
+
+        if post.get("over_18"):
+            print("Skipping NSFW post")
+            return None
         
         media_url = post.get("url")
         if media_url and (media_url.endswith((".jpeg",".jpg", ".png", ".gif", ".mp4"))):

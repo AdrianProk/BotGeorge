@@ -26,7 +26,8 @@ intents = discord.Intents.default()
 intents.messages = True  
 intents.message_content = True
 
-client = discord.Client(intents=intents)
+# Never let stored/user text ping @everyone, roles or users.
+client = discord.Client(intents=intents, allowed_mentions=discord.AllowedMentions.none())
 
 #subreddits:
 
