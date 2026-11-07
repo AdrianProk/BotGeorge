@@ -1,3 +1,27 @@
+# Secrets / local config
+.env
 token.json
+
+# Runtime data (database, backups, logs, legacy Data.json import)
+/data/*
+!/data/.gitkeep
+
+# Temporary media
+media/
+*.mp3
+qr.png
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Prototyping leftovers
+prototyping/*.csv
+prototyping/*.png
+prototyping/*.pdf
