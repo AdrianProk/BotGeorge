@@ -39,7 +39,16 @@ class Mp3(commands.Cog):
             else "Alright, give me a moment……"
         )
 
-        async with ctx.typing(), youtube.convert(url, max_bytes=upload_limit(ctx)) as result:
+        async def on_update(version: str) -> None:
+            await ctx.send(
+                f"YouTube changed something, so I updated my downloader to {version}. Trying again…"
+            )
+            await self.bot.notify_owner(f"⬆️ yt-dlp updated after a failed download: now {version}")
+
+        async with (
+            ctx.typing(),
+            youtube.convert(url, max_bytes=upload_limit(ctx), on_update=on_update) as result,
+        ):
             await ctx.send(
                 truncate(
                     f"Here is your Mp3 :) **{discord.utils.escape_markdown(result.title)}** "
@@ -47,6 +56,25 @@ class Mp3(commands.Cog):
                 ),
                 file=discord.File(result.path, filename=result.filename),
             )
+
+    @commands.hybrid_command(
+        name="ytdlp", description="Owner only: check for a yt-dlp update right now"
+    )
+    @commands.is_owner()
+    async def ytdlp(self, ctx: commands.Context) -> None:
+        updater = self.bot.ytdlp
+        async with ctx.typing():
+            before = updater.active_version
+            new = await updater.update_if_available()
+        if new:
+            text = f"Updated yt-dlp {before} → {new}. The next download uses it."
+        elif updater.last_error:
+            text = f"Update check failed: {updater.last_error}. Still using {before}."
+        elif not updater.enabled:
+            text = f"Auto-update is turned off (YTDLP_AUTO_UPDATE). Using {before}."
+        else:
+            text = f"yt-dlp {before} ({updater.active_source}) is the newest {updater.channel} version."
+        await ctx.send(truncate(text), ephemeral=True)
 
 
 async def setup(bot: GeorgeBot) -> None:

@@ -16,6 +16,7 @@ from george.config import Settings
 from george.errors import UserFacingError, truncate
 from george.services.reddit import RedditService
 from george.services.youtube import YouTubeService
+from george.services.ytdlp_updater import YtDlpUpdater
 from george.storage.content_repo import ContentRepo, import_initial_content
 from george.storage.db import Database
 
@@ -59,10 +60,17 @@ class GeorgeBot(commands.Bot):
         self.settings = settings
         self.db = Database(settings.db_path)
         self.content = ContentRepo(self.db)
+        self.ytdlp = YtDlpUpdater(
+            settings.ytdlp_dir,
+            channel=settings.ytdlp_channel,
+            enabled=settings.ytdlp_auto_update,
+        )
         self.youtube = YouTubeService(
             max_duration_s=settings.mp3_max_duration_s,
             max_concurrent=settings.mp3_max_concurrent,
             ffmpeg_location=settings.ffmpeg_location,
+            job_timeout_s=settings.mp3_job_timeout_s,
+            updater=self.ytdlp,
         )
         self.http_session: aiohttp.ClientSession | None = None
         self.reddit: RedditService | None = None
@@ -96,6 +104,10 @@ class GeorgeBot(commands.Bot):
 
         self.heartbeat.start()
         self.daily_backup.start()
+        if self.settings.ytdlp_auto_update:
+            self.ytdlp_update_check.change_interval(hours=self.settings.ytdlp_update_interval_h)
+            self.ytdlp_update_check.start()
+        log.info("yt-dlp %s (%s)", self.ytdlp.active_version, self.ytdlp.active_source)
 
     async def _sync_commands(self) -> None:
         if self.settings.guild_ids:
@@ -115,6 +127,7 @@ class GeorgeBot(commands.Bot):
         log.info("Shutting down…")
         self.heartbeat.cancel()
         self.daily_backup.cancel()
+        self.ytdlp_update_check.cancel()
         await self.youtube.drain(timeout_s=60)
         await super().close()
         if self.http_session is not None:
@@ -133,6 +146,14 @@ class GeorgeBot(commands.Bot):
         """Touch a file so a container health check can tell the bot is alive."""
         if self.is_ready() and not self.is_closed():
             self.settings.heartbeat_path.write_text(str(int(time.time())), encoding="utf-8")
+
+    @tasks.loop(hours=6)
+    async def ytdlp_update_check(self) -> None:
+        """Look for a newer yt-dlp on start and every YTDLP_UPDATE_INTERVAL_H hours."""
+        old = self.ytdlp.active_version
+        new = await self.ytdlp.update_if_available()
+        if new:
+            await self.notify_owner(f"⬆️ yt-dlp updated automatically: {old} → {new}")
 
     @tasks.loop(hours=24)
     async def daily_backup(self) -> None:

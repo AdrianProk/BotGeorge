@@ -1,29 +1,39 @@
-"""YouTube → MP3 conversion with yt-dlp.
+"""YouTube → MP3 conversion.
 
-This is the only module that imports yt_dlp, so yt-dlp updates can't break
-anything else. Each job runs in its own temporary directory, the number of
-parallel jobs is capped, and length/size limits are enforced *before* the
-download starts.
+The bot process never imports yt_dlp. Every job runs `george.services.ytdlp_worker`
+in a fresh Python process, with the auto-updated yt-dlp (if any) first on
+PYTHONPATH. So:
+
+* a yt-dlp update takes effect with the next job, without restarting the bot;
+* a hanging download can be killed (threads can't be);
+* each job has its own temporary directory, and the number of parallel jobs is capped.
+
+When a job fails because yt-dlp looks outdated, the updater is asked for a newer
+version right away and the job is retried once.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import re
 import shutil
+import sys
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
-import yt_dlp
-from yt_dlp.utils import DownloadError
-
+import george
 from george.errors import UserFacingError
+
+if TYPE_CHECKING:
+    from george.services.ytdlp_updater import YtDlpUpdater
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +42,10 @@ SHORT_HOSTS = {"youtu.be", "www.youtu.be"}
 PATH_STYLES = {"shorts", "live", "embed", "v"}
 VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 BITRATES_KBPS = (192, 160, 128, 96, 64)
+
+# Folder that contains the `george` package, so the worker can import it even
+# when the bot runs from a source checkout (George.py) without being installed.
+PACKAGE_ROOT = Path(george.__file__).resolve().parent.parent
 
 OUTDATED_HINT = (
     "YouTube changed something on their side and my downloader needs an update. "
@@ -57,7 +71,15 @@ ERROR_HINTS: tuple[tuple[str, str, bool], ...] = (
     ("requested format is not available", OUTDATED_HINT, True),
     ("http error 403", OUTDATED_HINT, True),
     ("javascript runtime", OUTDATED_HINT, True),
+    ("please report this issue", OUTDATED_HINT, True),
 )
+
+
+class YtDlpOutdatedError(UserFacingError):
+    """yt-dlp failed in a way that usually means YouTube changed and an update is needed."""
+
+    def __init__(self, message: str = OUTDATED_HINT) -> None:
+        super().__init__(message, notify_owner=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +89,7 @@ class Mp3Result:
     title: str
     duration_s: int
     bitrate_kbps: int
+    ytdlp_version: str
 
 
 def normalize_youtube_url(raw: str) -> str | None:
@@ -117,6 +140,8 @@ def explain_download_error(message: str) -> UserFacingError:
     lowered = message.lower()
     for needle, text, notify in ERROR_HINTS:
         if needle in lowered:
+            if text == OUTDATED_HINT:
+                return YtDlpOutdatedError()
             return UserFacingError(text, notify_owner=notify)
     return UserFacingError(
         "The MP3 download failed. The link may be invalid or YouTube blocked the request."
@@ -128,24 +153,11 @@ def format_duration(seconds: int) -> str:
     return f"{minutes}:{secs:02d} min"
 
 
-def yt_dlp_version() -> str:
-    return yt_dlp.version.__version__
-
-
-class _YtdlLogger:
-    """Route yt-dlp's output into our logging instead of stdout."""
-
-    def debug(self, msg: str) -> None:
-        log.debug("yt-dlp: %s", msg)
-
-    def info(self, msg: str) -> None:
-        log.debug("yt-dlp: %s", msg)
-
-    def warning(self, msg: str) -> None:
-        log.info("yt-dlp: %s", msg)
-
-    def error(self, msg: str) -> None:
-        log.warning("yt-dlp: %s", msg)
+def error_from_worker(payload: dict[str, Any]) -> UserFacingError:
+    message = str(payload.get("message") or "The conversion failed :(")
+    if payload.get("outdated"):
+        return YtDlpOutdatedError()
+    return UserFacingError(message, notify_owner=bool(payload.get("notify_owner")))
 
 
 class YouTubeService:
@@ -155,9 +167,13 @@ class YouTubeService:
         max_duration_s: int,
         max_concurrent: int,
         ffmpeg_location: str | None = None,
+        job_timeout_s: float = 600,
+        updater: YtDlpUpdater | None = None,
     ) -> None:
         self.max_duration_s = max_duration_s
         self._ffmpeg_location = ffmpeg_location
+        self._job_timeout_s = job_timeout_s
+        self.updater = updater
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._active = 0
         self._idle = asyncio.Event()
@@ -170,8 +186,17 @@ class YouTubeService:
         return self._semaphore.locked()
 
     @asynccontextmanager
-    async def convert(self, url: str, *, max_bytes: int) -> AsyncIterator[Mp3Result]:
-        """Download `url` as MP3. The file is deleted when the `async with` block ends."""
+    async def convert(
+        self,
+        url: str,
+        *,
+        max_bytes: int,
+        on_update: Callable[[str], Awaitable[None]] | None = None,
+    ) -> AsyncIterator[Mp3Result]:
+        """Download `url` as MP3. The file is deleted when the `async with` block ends.
+
+        `on_update(version)` is awaited if yt-dlp had to be updated during the job.
+        """
         if not self.accepting:
             raise UserFacingError("I'm restarting right now. Try again in a minute.")
         tmp = Path(tempfile.mkdtemp(prefix="george-mp3-"))
@@ -179,7 +204,20 @@ class YouTubeService:
         self._idle.clear()
         try:
             async with self._semaphore:
-                result = await asyncio.to_thread(self._convert_blocking, url, tmp, max_bytes)
+                try:
+                    result = await self._run_job(url, tmp, max_bytes)
+                except YtDlpOutdatedError:
+                    new_version = (
+                        await self.updater.update_if_available(forced=True)
+                        if self.updater
+                        else None
+                    )
+                    if not new_version:
+                        raise
+                    if on_update:
+                        await on_update(new_version)
+                    _empty_dir(tmp)
+                    result = await self._run_job(url, tmp, max_bytes)
             yield result
         finally:
             self._active -= 1
@@ -195,97 +233,77 @@ class YouTubeService:
         except TimeoutError:
             log.warning("Shutting down with %d MP3 job(s) still running", self._active)
 
-    # -- blocking part, runs in a worker thread ---------------------------------
+    def _worker_env(self) -> dict[str, str]:
+        env = os.environ.copy()
+        overlay = self.updater.active_path() if self.updater else None
+        paths = [str(p) for p in (overlay, PACKAGE_ROOT) if p]
+        if env.get("PYTHONPATH"):
+            paths.append(env["PYTHONPATH"])
+        env["PYTHONPATH"] = os.pathsep.join(paths)
+        env["PYTHONIOENCODING"] = "utf-8"
+        return env
 
-    def _base_opts(self) -> dict[str, Any]:
-        opts: dict[str, Any] = {
-            "quiet": True,
-            "no_warnings": True,
-            "noprogress": True,
-            "noplaylist": True,
-            "socket_timeout": 30,
-            "retries": 3,
-            "logger": _YtdlLogger(),
+    async def _run_job(self, url: str, tmp: Path, max_bytes: int) -> Mp3Result:
+        job = {
+            "url": url,
+            "tmp": str(tmp),
+            "max_bytes": max_bytes,
+            "max_duration_s": self.max_duration_s,
+            "ffmpeg_location": self._ffmpeg_location,
         }
-        if self._ffmpeg_location:
-            opts["ffmpeg_location"] = self._ffmpeg_location
-        return opts
-
-    def _convert_blocking(self, url: str, tmp: Path, max_bytes: int) -> Mp3Result:
-        try:
-            with yt_dlp.YoutubeDL(self._base_opts()) as ydl:
-                info = ydl.extract_info(url, download=False)
-        except DownloadError as exc:
-            log.info("yt-dlp metadata error for %s: %s", url, exc)
-            raise explain_download_error(str(exc)) from exc
-
-        if not info or info.get("_type") == "playlist":
-            raise UserFacingError("Please send a link to a single video, not a playlist.")
-        if info.get("is_live") or info.get("live_status") in {
-            "is_live",
-            "is_upcoming",
-            "post_live",
-        }:
-            raise UserFacingError("I can't convert livestreams, sorry.")
-
-        duration = int(info.get("duration") or 0)
-        if duration <= 0:
-            raise UserFacingError("I couldn't work out how long that video is, so I won't risk it.")
-        if duration > self.max_duration_s:
-            raise UserFacingError(
-                f"That video is too long ({format_duration(duration)}). "
-                f"The limit is {format_duration(self.max_duration_s)}."
-            )
-        bitrate = choose_bitrate(duration, max_bytes)
-        if bitrate is None:
-            raise UserFacingError(
-                f"That video is too long to fit this server's upload limit "
-                f"({max_bytes // (1024 * 1024)} MB)."
-            )
-
-        opts = {
-            **self._base_opts(),
-            "format": "bestaudio/best",
-            "outtmpl": str(tmp / "%(id)s.%(ext)s"),
-            "writethumbnail": True,
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": str(bitrate),
-                },
-                {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
-                {"key": "EmbedThumbnail"},
-                {"key": "FFmpegMetadata"},
-            ],
-            "postprocessor_args": {"EmbedThumbnail": ["-id3v2_version", "3"]},
-        }
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-        except DownloadError as exc:
-            log.info("yt-dlp download error for %s: %s", url, exc)
-            raise explain_download_error(str(exc)) from exc
-
-        path = tmp / f"{info.get('id')}.mp3"
-        if not path.is_file():
-            found = sorted(tmp.glob("*.mp3"))
-            if not found:
-                raise UserFacingError("The conversion failed, I didn't get an MP3 file :(")
-            path = found[0]
-
-        size = path.stat().st_size
-        if size > max_bytes:
-            raise UserFacingError(
-                f"The MP3 came out at {size / (1024 * 1024):.1f} MB, which is too big for "
-                f"this server's upload limit ({max_bytes // (1024 * 1024)} MB)."
-            )
-
-        title = str(info.get("title") or "audio")
-        return Mp3Result(
-            path=path,
-            filename=safe_filename(title),
-            title=title,
-            duration_s=duration,
-            bitrate_kbps=bitrate,
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "george.services.ytdlp_worker",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+            env=self._worker_env(),
         )
+        try:
+            _, err = await asyncio.wait_for(
+                proc.communicate(json.dumps(job).encode()), self._job_timeout_s
+            )
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise UserFacingError("That took way too long, so I gave up :(") from None
+        except asyncio.CancelledError:
+            proc.kill()
+            await proc.wait()
+            raise
+
+        stderr = err.decode(errors="replace").strip()
+        for line in stderr.splitlines():
+            log.debug("worker: %s", line)
+
+        result_file = tmp / "result.json"
+        try:
+            payload = json.loads(result_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            log.error(
+                "MP3 worker exited with %s and no result: %s", proc.returncode, stderr[-2000:]
+            )
+            raise UserFacingError("The conversion crashed :( The error was logged.") from None
+
+        if not payload.get("ok"):
+            if payload.get("detail"):
+                log.info("MP3 job for %s failed: %s", url, payload["detail"])
+            raise error_from_worker(payload)
+
+        return Mp3Result(
+            path=Path(payload["path"]),
+            filename=safe_filename(payload["title"]),
+            title=payload["title"],
+            duration_s=int(payload["duration_s"]),
+            bitrate_kbps=int(payload["bitrate_kbps"]),
+            ytdlp_version=str(payload.get("ytdlp_version", "?")),
+        )
+
+
+def _empty_dir(folder: Path) -> None:
+    for child in folder.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)

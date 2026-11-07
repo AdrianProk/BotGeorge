@@ -29,6 +29,7 @@ Prefix commands ignore upper/lower case, so the old spellings (`$Meme`, `$Mp3`,
 | `$content list <category> [page]` | Show what George has learned, with `#id`s |
 | `$content remove <id>` | Remove an entry (see [Moderation](#moderation)) |
 | `$version` | Bot, yt-dlp and ffmpeg versions |
+| `$ytdlp` | Owners only: check for a yt-dlp update now |
 
 What people teach George is **shared between all servers** he's in.
 
@@ -107,6 +108,7 @@ Everything George stores lives in the **`data/`** folder:
 data/
 ├── george.db        # all learned content (SQLite)
 ├── backups/         # daily copies of the database (last 7 kept)
+├── yt-dlp/          # auto-updated yt-dlp versions (safe to delete)
 ├── logs/            # log files (when not running in Docker)
 └── heartbeat        # used by the Docker health check
 ```
@@ -114,17 +116,36 @@ data/
 To move George to another computer, copy **`.env`** and **`data/`**, then start it there.
 To restore a backup, stop the bot and copy a file from `data/backups/` over `data/george.db`.
 
-## Updating (including yt-dlp)
+## Keeping yt-dlp up to date (automatic)
 
-YouTube changes often, so yt-dlp needs regular updates. When `$mp3` starts
-failing with "YouTube changed something", update the bot:
+YouTube changes things regularly, and then older yt-dlp versions can't download
+anything until a fixed release comes out. So George updates yt-dlp **by himself,
+while running**:
 
-- **Docker:** `deploy/update.sh` (Linux/macOS) or `deploy/update.ps1` (Windows).
-  It pulls the newest image and restarts George. You can schedule it daily (instructions inside the scripts).
-- **Without Docker:** `git pull`, then `uv sync --no-dev --upgrade-package yt-dlp`, then restart.
+- He checks PyPI **on start, every 6 hours** (`YTDLP_UPDATE_INTERVAL_H`), and
+  **right after a download fails** with a "YouTube changed something" error.
+- A new version is downloaded into `data/yt-dlp/`, checked against PyPI's
+  SHA-256, and test-imported. Only then does George switch to it.
+- Every `$mp3` runs yt-dlp in its own short-lived process, so the **next download
+  uses the new version, without a restart**. A download that failed because yt-dlp
+  was outdated is retried once after the update.
+- If an update fails, George keeps using the current version. If the bundled
+  version (from the image) is newer, that one is used.
 
-Dependabot checks for new yt-dlp versions every day and opens a pull request.
-Each merge to `main` builds a new image.
+Useful extras:
+- `$version` shows the yt-dlp version in use and whether it's `bundled` or `auto-updated`.
+- `$ytdlp` (owners only) checks for an update right now.
+- With `OWNER_LOG_CHANNEL_ID` set, George posts every update there.
+- `YTDLP_CHANNEL=nightly` gets fixes sooner (daily builds). `YTDLP_AUTO_UPDATE=false` turns it off.
+
+## Updating George himself
+
+- **Docker:** `deploy/update.sh` (Linux/macOS) or `deploy/update.ps1` (Windows)
+  pulls the newest image and restarts George. You can schedule it, e.g. weekly (instructions inside).
+- **Without Docker:** `git pull`, `uv sync --no-dev`, then restart.
+
+Dependabot also opens a pull request for every new yt-dlp release, so the version
+bundled in the image keeps up too.
 
 ## Upgrading from the old version (George.py + Data.json)
 
@@ -166,7 +187,8 @@ src/george/
 ├── bot.py           # GeorgeBot: setup, error handling, backups, heartbeat
 ├── config.py        # settings from environment / .env
 ├── cogs/            # Discord commands (basic, content, meme, qr, mp3)
-├── services/        # Reddit, YouTube (only place that imports yt-dlp), QR
+├── services/        # Reddit, QR, YouTube; yt-dlp runs in ytdlp_worker.py,
+│                    #   updated by ytdlp_updater.py
 ├── storage/         # SQLite database + content repository
 └── seed/content.json  # starting content for a fresh database
 ```

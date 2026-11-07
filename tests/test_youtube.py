@@ -7,6 +7,7 @@ import pytest
 from george.errors import UserFacingError
 from george.services.youtube import (
     OUTDATED_HINT,
+    Mp3Result,
     YouTubeService,
     choose_bitrate,
     explain_download_error,
@@ -87,28 +88,24 @@ def test_error_mapping(message, expected, notify):
     assert err.notify_owner is notify
 
 
-async def test_convert_cleans_up_and_limits_concurrency(monkeypatch, tmp_path):
+async def test_convert_cleans_up_and_limits_concurrency(monkeypatch):
     service = YouTubeService(max_duration_s=900, max_concurrent=1)
     running = 0
     peak = 0
     seen_dirs = []
 
-    def fake_convert(url, tmp, max_bytes):
+    async def fake_job(url, tmp, max_bytes):
         nonlocal running, peak
         running += 1
         peak = max(peak, running)
         seen_dirs.append(tmp)
         out = tmp / "x.mp3"
         out.write_bytes(b"ID3")
-        import time
-
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
         running -= 1
-        from george.services.youtube import Mp3Result
+        return Mp3Result(out, "x.mp3", "x", 60, 192, "test")
 
-        return Mp3Result(out, "x.mp3", "x", 60, 192)
-
-    monkeypatch.setattr(service, "_convert_blocking", fake_convert)
+    monkeypatch.setattr(service, "_run_job", fake_job)
 
     async def job():
         async with service.convert(CANON, max_bytes=1000) as result:

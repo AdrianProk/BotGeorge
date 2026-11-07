@@ -12,7 +12,6 @@ import discord
 from discord.ext import commands
 
 from george import __version__
-from george.services.youtube import yt_dlp_version
 
 if TYPE_CHECKING:
     from george.bot import GeorgeBot
@@ -79,7 +78,7 @@ class Basic(commands.Cog):
             f"George   {__version__}\n"
             f"Python   {platform.python_version()}\n"
             f"discord  {discord.__version__}\n"
-            f"yt-dlp   {yt_dlp_version()}\n"
+            f"yt-dlp   {self.bot.ytdlp.active_version} ({self.bot.ytdlp.active_source})\n"
             f"ffmpeg   {ffmpeg}\n"
             f"deno     {deno}\n"
             f"uptime   {uptime_min // 60} h {uptime_min % 60} min\n"

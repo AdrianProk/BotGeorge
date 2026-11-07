@@ -3,7 +3,7 @@
 > **Status (implemented on branch `claude/discord-bot-production-plan-z0up80`):** Phases 0–6 are done, with two exceptions.
 > **Still open:** resetting the leaked token (manual, Developer Portal) and a first real run against Discord, YouTube and Docker.
 > Neither Discord/YouTube nor a Docker daemon was reachable from the build environment.
-> The yt-dlp auto-merge and canary steps from §6 are the next follow-up.
+> Automatic yt-dlp updates inside the running bot were added in 1.1.0 (see §6).
 
 **Scope:** Make the bot *as it is today* (same features, same commands) safe, stable and deployable.
 The two future goals, **better multi-user support** and **automatic YouTube library (yt-dlp) updates**,
@@ -291,26 +291,27 @@ Total: about **5–7 focused days**. Phases 3, 4 and 5 can be split into one PR 
 - Slash commands (Phase 2) allow ephemeral replies, autocomplete, and per-command permissions set by server admins.
 - Later options: a job queue with position feedback for MP3s, and per-guild settings (enabled commands, subreddit list, NSFW policy) in a `guild_settings` table.
 
-**Keeping yt-dlp up to date automatically** (confirmed goal)
+**Keeping yt-dlp up to date automatically** (confirmed goal, **implemented in 1.1.0**)
 
-yt-dlp needs frequent updates because YouTube keeps changing. When it's outdated, `$Mp3` breaks with "Sign in to confirm…", "nsig extraction failed" or HTTP 403 errors. Phases 1, 5 and 6 make updates *safe*: a lockfile, tests around the wrapper, and a portable image. `services/youtube.py` is the only module that imports `yt_dlp`, so an update can't break anything else.
+When YouTube changes something, the installed yt-dlp throws errors ("nsig extraction failed", "Requested format is not available", HTTP 403…) and **no video can be downloaded** until a fixed yt-dlp release is installed. Fixes usually land within hours to a day. An image that only gets yt-dlp at build time would stay broken until it's rebuilt and pulled, so the bot checks and updates **inside the running container**:
 
-Recommended pipeline, which fits the portable Docker setup:
-1. **Dependabot** checks `yt-dlp` **daily** and opens a PR that bumps the lockfile.
-2. **CI** runs the unit tests and a **canary job** that converts one short, known-good public video with the new version.
-3. If CI is green, the PR **auto-merges** (GitHub auto-merge, limited to `yt-dlp` patch/minor bumps).
-4. The merge triggers the **multi-arch image build** and pushes `ghcr.io/…:latest` plus a dated tag.
-5. On the host, a **scheduled job pulls the new image and restarts** the bot: `docker compose pull && docker compose up -d`, run from cron, a systemd timer or Windows Task Scheduler (`deploy/update.sh` / `update.ps1`). This keeps the host side portable.
-6. **Rollback:** pin the previous dated tag in `compose.yaml`.
+| Layer | What it does | How fast |
+|---|---|---|
+| 1. **In-bot updater** (`services/ytdlp_updater.py`) | Checks PyPI on start, every `YTDLP_UPDATE_INTERVAL_H` (default 6 h), and **immediately after an "outdated" error** (rate-limited to once per 30 min). Downloads the pure-Python wheels of yt-dlp and its pinned yt-dlp-ejs, verifies the SHA-256 against PyPI, unpacks them to `DATA_DIR/yt-dlp/<version>`, test-imports them in a fresh interpreter, then switches over atomically (`state.json`). | minutes after a release |
+| 2. **Per-job worker process** (`services/ytdlp_worker.py`) | Every MP3 job is a fresh `python -m george.services.ytdlp_worker` with the active yt-dlp folder first on `PYTHONPATH`, so **the next job uses the new version without a restart** and without hot-reloading modules. Hanging jobs are killed after `MP3_JOB_TIMEOUT_S`. | next download |
+| 3. **Retry after update** | A job that failed with an outdated error triggers layer 1; if a newer version got installed, the user is told and the job is retried once. | same request |
+| 4. **Image baseline** | Dependabot checks yt-dlp daily and opens a PR; each merge rebuilds the multi-arch image, and `deploy/update.sh` pulls it. The bundled version is used whenever it is newer than the auto-updated one. | days |
 
-Safety nets inside the bot:
-- Map the typical "outdated extractor" errors to a clear message ("YouTube changed something, an update is on its way") and alert the owner channel.
-- A `$version` command shows the bot, yt-dlp and ffmpeg versions, so you can see whether an update has landed.
-- Ship Deno in the image, because newer yt-dlp versions need a JS runtime for YouTube.
+Safety properties:
+- Nothing is switched unless the checksum and the test import pass. A failed update leaves the current version in place, and the bundled version is always the fallback.
+- The wheels are pure Python, so `data/yt-dlp/` works on any OS or CPU and moves with the `data/` folder. Deleting the folder just falls back to the bundled version.
+- The bot process itself never imports yt_dlp. It's only loaded in worker processes.
+- Owner visibility: every update and every "outdated" failure is posted to the owner log channel. `$version` shows the active version and its source, and `$ytdlp` (owner) forces a check.
+- `YTDLP_CHANNEL=nightly` uses yt-dlp's daily builds for the fastest fixes. `YTDLP_AUTO_UPDATE=false` turns layers 1 and 3 off.
 
-Simpler fallback for **Option B (no Docker)**: a scheduled `uv lock --upgrade-package yt-dlp && uv sync`, then a restart. Or upgrade yt-dlp in the start script before launching. It's less reproducible, but fine for a private bot.
-
-*(Avoid:* `pip install -U` and reloading the module while the bot is running. It's fragile and can't be rolled back.)
+Possible follow-ups:
+- A CI **canary** that converts one known-good video with each Dependabot yt-dlp PR, plus auto-merge. GitHub-hosted runners are often blocked by YouTube, so this needs a self-hosted runner to be meaningful.
+- Automatically switching to the nightly channel for a few days when the stable channel has no fix yet.
 
 ---
 

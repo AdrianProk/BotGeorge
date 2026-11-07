@@ -50,7 +50,12 @@ class Settings:
 
     mp3_max_duration_s: int = 15 * 60
     mp3_max_concurrent: int = 2
+    mp3_job_timeout_s: int = 600
     ffmpeg_location: str | None = None
+
+    ytdlp_auto_update: bool = True
+    ytdlp_update_interval_h: int = 6
+    ytdlp_channel: str = "stable"
 
     backup_keep: int = 7
 
@@ -65,6 +70,10 @@ class Settings:
     @property
     def log_dir(self) -> Path:
         return self.data_dir / "logs"
+
+    @property
+    def ytdlp_dir(self) -> Path:
+        return self.data_dir / "yt-dlp"
 
     @property
     def heartbeat_path(self) -> Path:
@@ -146,6 +155,10 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
 
     subreddits = _str_list(env.get("SUBREDDITS")) or DEFAULT_SUBREDDITS
 
+    channel = (env.get("YTDLP_CHANNEL") or "stable").strip().lower()
+    if channel not in {"stable", "nightly"}:
+        raise ConfigError("YTDLP_CHANNEL must be 'stable' or 'nightly'")
+
     return Settings(
         discord_token=token,
         data_dir=data_dir,
@@ -163,6 +176,12 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         meme_max_bytes=_int(env.get("MEME_MAX_BYTES"), 25 * 1024 * 1024, "MEME_MAX_BYTES"),
         mp3_max_duration_s=_int(env.get("MP3_MAX_DURATION_S"), 15 * 60, "MP3_MAX_DURATION_S"),
         mp3_max_concurrent=_int(env.get("MP3_MAX_CONCURRENT"), 2, "MP3_MAX_CONCURRENT"),
+        mp3_job_timeout_s=_int(env.get("MP3_JOB_TIMEOUT_S"), 600, "MP3_JOB_TIMEOUT_S", minimum=30),
         ffmpeg_location=env.get("FFMPEG_LOCATION") or None,
+        ytdlp_auto_update=_bool(env.get("YTDLP_AUTO_UPDATE"), True),
+        ytdlp_update_interval_h=_int(
+            env.get("YTDLP_UPDATE_INTERVAL_H"), 6, "YTDLP_UPDATE_INTERVAL_H"
+        ),
+        ytdlp_channel=channel,
         backup_keep=_int(env.get("BACKUP_KEEP"), 7, "BACKUP_KEEP"),
     )

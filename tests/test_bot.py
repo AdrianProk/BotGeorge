@@ -20,12 +20,19 @@ EXPECTED = {
     "meme",
     "qr",
     "mp3",
+    "ytdlp",
 }
 
 
 async def test_setup_registers_prefix_and_slash_commands(tmp_path):
     settings = load_settings(
-        {"DISCORD_TOKEN": "x", "DATA_DIR": str(tmp_path), "SYNC_COMMANDS": "0", "LOG_TO_FILE": "0"}
+        {
+            "DISCORD_TOKEN": "x",
+            "DATA_DIR": str(tmp_path),
+            "SYNC_COMMANDS": "0",
+            "LOG_TO_FILE": "0",
+            "YTDLP_AUTO_UPDATE": "0",
+        }
     )
     bot = GeorgeBot(settings)
     try:
@@ -33,7 +40,7 @@ async def test_setup_registers_prefix_and_slash_commands(tmp_path):
         prefix = {c.name for c in bot.commands}
         slash = {c.name for c in bot.tree.get_commands()}
         if not bot.ffmpeg_available():
-            EXPECTED.discard("mp3")
+            EXPECTED.difference_update({"mp3", "ytdlp"})
         assert prefix >= EXPECTED
         assert slash >= EXPECTED
         # Old command spellings keep working through case-insensitivity and aliases.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 – automatic yt-dlp updates
+
+### Added
+- George keeps yt-dlp up to date while running: checks PyPI on start, every 6 hours
+  and right after an "outdated" error; installs into `data/yt-dlp/` after a SHA-256
+  check and a test import; no restart needed. Failed downloads are retried once
+  after an update.
+- `$ytdlp` (owners) checks for an update now; `$version` shows which yt-dlp is used.
+- Settings `YTDLP_AUTO_UPDATE`, `YTDLP_UPDATE_INTERVAL_H`, `YTDLP_CHANNEL`, `MP3_JOB_TIMEOUT_S`.
+
+### Changed
+- Each MP3 conversion runs in its own process (picks up yt-dlp updates
+  immediately; hanging downloads are killed after `MP3_JOB_TIMEOUT_S`).
+
 ## 1.0.0 – production-ready refactor
 
 ### Changed
