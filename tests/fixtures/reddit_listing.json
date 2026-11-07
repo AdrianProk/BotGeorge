@@ -1,0 +1,18 @@
+{
+  "kind": "Listing",
+  "data": {
+    "children": [
+      {"kind": "t3", "data": {"id": "img1", "subreddit": "meme", "title": "Image post", "permalink": "/r/meme/comments/img1/", "url": "https://i.redd.it/abc.jpeg", "over_18": false}},
+      {"kind": "t3", "data": {"id": "nsfw1", "subreddit": "meme", "title": "NSFW post", "permalink": "/r/meme/comments/nsfw1/", "url": "https://i.redd.it/nsfw.png", "over_18": true}},
+      {"kind": "t3", "data": {"id": "vid1", "subreddit": "meme", "title": "Video", "permalink": "/r/meme/comments/vid1/", "url": "https://v.redd.it/xyz", "is_video": true}},
+      {"kind": "t3", "data": {"id": "self1", "subreddit": "meme", "title": "Text", "permalink": "/r/meme/comments/self1/", "url": "https://www.reddit.com/r/meme/comments/self1/", "is_self": true}},
+      {"kind": "t3", "data": {"id": "sticky", "subreddit": "meme", "title": "Rules", "permalink": "/r/meme/comments/sticky/", "url": "https://i.redd.it/rules.png", "stickied": true}},
+      {"kind": "t3", "data": {"id": "gifv1", "subreddit": "meme", "title": "Gifv", "permalink": "/r/meme/comments/gifv1/", "url": "https://i.imgur.com/abc.gifv"}},
+      {"kind": "t3", "data": {"id": "gal1", "subreddit": "meme", "title": "Gallery", "permalink": "/r/meme/comments/gal1/", "url": "https://www.reddit.com/gallery/gal1", "is_gallery": true,
+        "gallery_data": {"items": [{"media_id": "m1"}, {"media_id": "m2"}]},
+        "media_metadata": {"m1": {"status": "failed"}, "m2": {"status": "valid", "e": "Image", "s": {"u": "https://preview.redd.it/m2.jpg?width=640&amp;format=pjpg&amp;s=abc"}}}}},
+      {"kind": "t3", "data": {"id": "link1", "subreddit": "meme", "title": "Link", "permalink": "/r/meme/comments/link1/", "url": "https://example.com/article"}},
+      {"kind": "t3", "data": {"id": "http1", "subreddit": "meme", "title": "Insecure", "permalink": "/r/meme/comments/http1/", "url": "http://example.com/a.png"}}
+    ]
+  }
+}
