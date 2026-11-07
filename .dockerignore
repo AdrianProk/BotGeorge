@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+.env
+data
+docs
+prototyping
+tests
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+*.mp3

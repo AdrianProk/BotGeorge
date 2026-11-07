@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Python dependencies (uv.lock). Checked daily so yt-dlp updates arrive quickly;
+  # everything except yt-dlp is grouped into one PR to keep the noise down.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    groups:
+      python-deps:
+        patterns: ["*"]
+        exclude-patterns: ["yt-dlp", "yt-dlp-ejs"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"

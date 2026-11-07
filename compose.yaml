@@ -1,0 +1,26 @@
+# Start:   docker compose up -d          (first time, or without access to the
+#                                         prebuilt image: docker compose up -d --build)
+# Logs:    docker compose logs -f
+# Update:  deploy/update.sh  (or deploy/update.ps1 on Windows)
+services:
+  george:
+    image: ghcr.io/adrianprok/botgeorge:latest
+    build: .
+    container_name: george
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data          # overrides the value in .env inside the container
+    volumes:
+      - ./data:/data           # database, backups – copy this folder to move the bot
+    stop_grace_period: 75s     # running MP3 jobs get up to 60 s to finish
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

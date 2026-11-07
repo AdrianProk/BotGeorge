@@ -1,5 +1,10 @@
 # BotGeorge – Production Readiness Refactor Plan
 
+> **Status (implemented on branch `claude/discord-bot-production-plan-z0up80`):** Phases 0–6 are done, with two exceptions.
+> **Still open:** resetting the leaked token (manual, Developer Portal) and a first real run against Discord, YouTube and Docker.
+> Neither Discord/YouTube nor a Docker daemon was reachable from the build environment.
+> The yt-dlp auto-merge and canary steps from §6 are the next follow-up.
+
 **Scope:** Make the bot *as it is today* (same features, same commands) safe, stable and deployable.
 The two future goals, **better multi-user support** and **automatic YouTube library (yt-dlp) updates**,
 are out of scope here. The plan does set up the architecture for them (see §6).

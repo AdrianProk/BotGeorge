@@ -1,0 +1,21 @@
+# systemd unit for running George WITHOUT Docker on Linux.
+# 1. Clone to /opt/BotGeorge, create .env, run `uv sync --no-dev` there.
+# 2. sudo useradd --system --home /opt/BotGeorge george && sudo chown -R george /opt/BotGeorge
+# 3. sudo cp deploy/george.service /etc/systemd/system/ && sudo systemctl enable --now george
+[Unit]
+Description=George Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=george
+WorkingDirectory=/opt/BotGeorge
+EnvironmentFile=/opt/BotGeorge/.env
+ExecStart=/opt/BotGeorge/.venv/bin/python -m george
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=75
+
+[Install]
+WantedBy=multi-user.target
