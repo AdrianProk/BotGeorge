@@ -1,5 +1,20 @@
+import glob
 import os
+import shutil
 import yt_dlp
+
+
+def _find_ffmpeg():
+    """Return the folder containing ffmpeg, or None to let yt-dlp use PATH."""
+    if os.environ.get('FFMPEG_PATH'):
+        return os.environ['FFMPEG_PATH']
+    if shutil.which('ffmpeg') and shutil.which('ffprobe'):
+        return None
+    # Fallback: winget install location (PATH may be stale until restart)
+    pattern = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'WinGet',
+                           'Packages', 'Gyan.FFmpeg*', '*', 'bin', 'ffmpeg.exe')
+    matches = glob.glob(pattern)
+    return os.path.dirname(matches[0]) if matches else None
 
 
 def toMp3(url):
@@ -36,6 +51,10 @@ def toMp3(url):
             'quiet': True,
             'no_warnings': True,
         }
+
+        ffmpeg_dir = _find_ffmpeg()
+        if ffmpeg_dir:
+            ydl_opts['ffmpeg_location'] = ffmpeg_dir
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
