@@ -12,9 +12,10 @@ ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/data \
     LOG_TO_FILE=false
 
-# ffmpeg converts audio; gosu drops root privileges in the entrypoint.
+# ffmpeg converts audio; gosu drops root privileges in the entrypoint;
+# DejaVu Sans Mono renders ASCII art as text.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg gosu ca-certificates \
+    && apt-get install -y --no-install-recommends ffmpeg gosu ca-certificates fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Deno: the JavaScript runtime yt-dlp needs for YouTube. uv: installs Python deps.

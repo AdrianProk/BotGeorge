@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0 – ASCII art
+
+### Added
+- `$ascii`: picture → ASCII art `.txt` (width 20–300, optional invert); works with an
+  attachment or as a reply to a message with a picture.
+- `$asciiimage` (`$fromascii`): ASCII art `.txt` → black-and-white picture, styles
+  `smooth`, `blocks` and `text`; understands ASCII art made elsewhere (other characters,
+  Unicode blocks, Discord code blocks, Windows line endings).
+
+### Fixed
+- Memes: without Reddit OAuth, posts now come from meme-api.com (Reddit blocks anonymous
+  requests). Ported from the `$Meme fix` on main.
+- ffmpeg is found via `FFMPEG_PATH` and in the winget install folder on Windows.
+- Database backups no longer fail when a command reads content at the same moment.
+
 ## 1.1.0 – automatic yt-dlp updates
 
 ### Added

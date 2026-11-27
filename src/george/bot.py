@@ -27,6 +27,7 @@ EXTENSIONS = (
     "george.cogs.content",
     "george.cogs.meme",
     "george.cogs.qr",
+    "george.cogs.ascii",
     "george.cogs.mp3",
 )
 

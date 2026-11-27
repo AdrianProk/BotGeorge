@@ -1,6 +1,6 @@
 [project]
 name = "botgeorge"
-version = "1.1.0"
+version = "1.2.0"
 description = "George, the creepy gargoyle Discord bot"
 readme = "README.md"
 license = "MIT"
@@ -12,6 +12,7 @@ dependencies = [
     "aiohttp>=3.9,<4",
     "aiosqlite>=0.20,<1",
     "python-dotenv>=1.0,<2",
+    "pillow>=11,<13",
 ]
 
 [project.scripts]

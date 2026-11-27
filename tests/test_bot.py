@@ -19,6 +19,8 @@ EXPECTED = {
     "content",
     "meme",
     "qr",
+    "ascii",
+    "asciiimage",
     "mp3",
     "ytdlp",
 }

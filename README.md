@@ -23,6 +23,8 @@ Prefix commands ignore upper/lower case, so the old spellings (`$Meme`, `$Mp3`,
 | `$help` | Lists all commands |
 | `$meme` | A random meme from Reddit (NSFW posts only in NSFW channels) |
 | `$qr <text>` | QR code from text or a link (alias: `$createqr`) |
+| `$ascii [width] [invert]` + image | Turns a picture into ASCII art (.txt). Attach the image, or reply to a message with one. Width 20–300 characters (default 100). |
+| `$asciiimage [smooth\|blocks\|text] [invert]` + .txt | Turns an ASCII art .txt back into a black-and-white picture (alias: `$fromascii`). |
 | `$mp3 <YouTube link>` | MP3 of a single YouTube video (max 15 min by default) |
 | `$prompt` / `$compliment` / `$random` / `$fuckyou` | A random art prompt / compliment / random line / swear |
 | `$addprompt <text>` / `$addcompliment` / `$addrandom` / `$addswear` | Teach George something new |
@@ -43,9 +45,9 @@ What people teach George is **shared between all servers** he's in.
 4. Turn **Public Bot** off, so only you can add George to servers.
 5. Invite the bot. Replace `YOUR_APP_ID` with the *Application ID* from **General Information**:
    ```
-   https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot+applications.commands&permissions=2147535872
+   https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot+applications.commands&permissions=2147601408
    ```
-   (permissions: View Channels, Send Messages, Embed Links, Attach Files, Use Application Commands)
+   (permissions: View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Use Application Commands)
 
 ## 2. Configure
 
@@ -99,6 +101,21 @@ George tells you at startup if ffmpeg or Deno is missing. Without ffmpeg, only
 [`deploy/george.service`](deploy/george.service).
 
 ---
+
+## ASCII art
+
+- `$ascii` turns a picture into a `.txt` of characters from light to dark (` .:-=+*#%@`).
+  It's meant to be read as dark text on a light background, like in Notepad. Use `invert`
+  (`$ascii 80 true`) for art that looks right as light text in Discord's dark theme.
+  Small results are also shown directly in the chat.
+- `$asciiimage` turns such a `.txt` back into a picture. It also works with ASCII art from
+  anywhere else: George measures how much "ink" every character has. Styles:
+  - `smooth` (default): gray levels, smoothly scaled up, closest to the original picture
+  - `blocks`: the same as sharp pixel blocks
+  - `text`: the characters themselves, drawn in a monospace font
+- Tip: reply to George's `.txt` with `$asciiimage` to get the picture back.
+
+Everything is black and white for now.
 
 ## Data, backups and moving to another machine
 
