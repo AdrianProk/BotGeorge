@@ -93,7 +93,12 @@ class Database:
             target = backup_dir / f"george-{stamp}.db"
             if await asyncio.to_thread(target.exists):
                 return None
-            async with self.conn.execute("VACUUM INTO ?", (str(target),)):
+            # A separate connection: VACUUM fails while the main connection has a
+            # statement in progress (e.g. a command reading content right now).
+            async with (
+                aiosqlite.connect(self.path, timeout=5) as backup_conn,
+                backup_conn.execute("VACUUM INTO ?", (str(target),)),
+            ):
                 pass
             await asyncio.to_thread(_prune_backups, backup_dir, keep)
             return target

@@ -26,3 +26,10 @@ async def test_backup_skipped_when_recent(db, tmp_path):
     backups = tmp_path / "backups"
     assert await db.backup(backups, keep=5) is not None
     assert await db.backup(backups, keep=5, min_age_s=3600) is None
+
+
+async def test_backup_works_while_a_query_is_open(db, tmp_path):
+    """Regression: VACUUM on the main connection failed with 'statements in progress'."""
+    async with db.conn.execute("SELECT * FROM schema_version") as cur:
+        await cur.fetchone()  # statement still open
+        assert await db.backup(tmp_path / "backups", keep=3) is not None
