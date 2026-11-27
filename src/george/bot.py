@@ -35,8 +35,12 @@ EXTENSIONS = (
 DEFAULT_UPLOAD_LIMIT = 10 * 1024 * 1024
 
 
+def guild_upload_limit(guild: discord.Guild | None) -> int:
+    return guild.filesize_limit if guild else DEFAULT_UPLOAD_LIMIT
+
+
 def upload_limit(ctx: commands.Context) -> int:
-    return ctx.guild.filesize_limit if ctx.guild else DEFAULT_UPLOAD_LIMIT
+    return guild_upload_limit(ctx.guild)
 
 
 class GeorgeBot(commands.Bot):
@@ -198,26 +202,35 @@ class GeorgeBot(commands.Bot):
 
     # -- error handling ----------------------------------------------------------------
 
-    async def on_command_error(self, ctx: commands.Context, error: Exception) -> None:
-        if isinstance(error, commands.CommandNotFound):
-            return
+    async def _describe_error(self, error: BaseException, where: str, who: object) -> str:
+        """User-facing text for a command error; logs and reports unexpected ones."""
         if isinstance(error, commands.HybridCommandError):
             error = error.original
         if isinstance(error, commands.CommandInvokeError | app_commands.CommandInvokeError):
             error = error.original
 
-        message: str | None
         if isinstance(error, UserFacingError):
-            message = str(error)
             if error.notify_owner:
-                await self.notify_owner(
-                    f"⚠️ `{ctx.command}` failed for {ctx.author} in {ctx.guild or 'DMs'}: {error}"
-                )
-        elif isinstance(error, commands.CommandOnCooldown | app_commands.CommandOnCooldown):
-            message = f"Slow down! Try again in {error.retry_after:.0f} s."
-        elif isinstance(error, commands.MaxConcurrencyReached):
-            message = "You already have one of those running. Wait until it's finished :)"
-        elif isinstance(error, commands.MissingRequiredArgument):
+                await self.notify_owner(f"⚠️ `{where}` failed for {who}: {error}")
+            return str(error)
+        if isinstance(error, commands.CommandOnCooldown | app_commands.CommandOnCooldown):
+            return f"Slow down! Try again in {error.retry_after:.0f} s."
+        if isinstance(error, commands.MaxConcurrencyReached):
+            return "You already have one of those running. Wait until it's finished :)"
+        if isinstance(error, commands.BadArgument | commands.BadLiteralArgument):
+            return f"I didn't understand that: {error}"
+        if isinstance(error, commands.CheckFailure | app_commands.CheckFailure):
+            return str(error) or "You're not allowed to do that."
+        log.error(
+            "Unhandled error in %s", where, exc_info=(type(error), error, error.__traceback__)
+        )
+        await self.notify_owner(f"💥 Unhandled error in `{where}`: `{error!r}`")
+        return "Something went wrong :( The error was logged."
+
+    async def on_command_error(self, ctx: commands.Context, error: Exception) -> None:
+        if isinstance(error, commands.CommandNotFound):
+            return
+        if isinstance(error, commands.MissingRequiredArgument):
             extras = ctx.command.extras if ctx.command else {}
             usage = (
                 f"{ctx.clean_prefix}{ctx.command} {ctx.command.signature if ctx.command else ''}"
@@ -225,19 +238,10 @@ class GeorgeBot(commands.Bot):
             message = extras.get("missing_text") or (
                 f"You forgot the `{error.param.name}`. Usage: `{usage.strip()}`"
             )
-        elif isinstance(error, commands.BadArgument | commands.BadLiteralArgument):
-            message = f"I didn't understand that: {error}"
-        elif isinstance(error, commands.CheckFailure | app_commands.CheckFailure):
-            message = str(error) or "You're not allowed to do that."
         else:
-            log.error(
-                "Unhandled error in command %s",
-                ctx.command,
-                exc_info=(type(error), error, error.__traceback__),
+            message = await self._describe_error(
+                error, str(ctx.command), f"{ctx.author} in {ctx.guild or 'DMs'}"
             )
-            message = "Something went wrong :( The error was logged."
-            await self.notify_owner(f"💥 Unhandled error in `{ctx.command}`: `{error!r}`")
-
         try:
             await ctx.send(truncate(message), ephemeral=True)
         except discord.HTTPException:
@@ -246,12 +250,16 @@ class GeorgeBot(commands.Bot):
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
-        # Hybrid commands report through on_command_error; this only catches pure app commands.
-        log.error("App command error", exc_info=(type(error), error, error.__traceback__))
+        """Errors of pure app commands, e.g. the right-click (context menu) commands.
+        Hybrid commands report through on_command_error instead."""
+        name = interaction.command.name if interaction.command else "app command"
+        message = await self._describe_error(
+            error, name, f"{interaction.user} in {interaction.guild or 'DMs'}"
+        )
         send = (
             interaction.followup.send
             if interaction.response.is_done()
             else interaction.response.send_message
         )
         with contextlib.suppress(discord.HTTPException):
-            await send("Something went wrong :(", ephemeral=True)
+            await send(truncate(message), ephemeral=True)

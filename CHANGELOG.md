@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0 – right-click menu, replies, animated ASCII
+
+### Added
+- Right-click menu (Apps) on messages: Convert to MP3, Make QR code, Make ASCII art,
+  ASCII art to picture; on people: ASCII avatar.
+- `$mp3` and `$qr` also work as a reply to a message (link / text taken from it);
+  `$asciiimage` also reads a code block from the replied message.
+- `$ascii @person` turns an avatar into ASCII art.
+- Animated GIFs/WebPs (and animated avatars) become animated ASCII art: a `.txt` with
+  all frames plus an animated GIF; `$asciiimage` turns such a `.txt` back into a GIF.
+
+### Changed
+- Errors in right-click commands show the same clear messages as normal commands.
+- Text-style ASCII rendering is much faster (each character is drawn once and reused).
+
 ## 1.2.0 – ASCII art
 
 ### Added

@@ -22,10 +22,10 @@ Prefix commands ignore upper/lower case, so the old spellings (`$Meme`, `$Mp3`,
 | `$name` | George introduces himself |
 | `$help` | Lists all commands |
 | `$meme` | A random meme from Reddit (NSFW posts only in NSFW channels) |
-| `$qr <text>` | QR code from text or a link (alias: `$createqr`) |
-| `$ascii [width] [invert]` + image | Turns a picture into ASCII art (.txt). Attach the image, or reply to a message with one. Width 20–300 characters (default 100). |
-| `$asciiimage [smooth\|blocks\|text] [invert]` + .txt | Turns an ASCII art .txt back into a black-and-white picture (alias: `$fromascii`). |
-| `$mp3 <YouTube link>` | MP3 of a single YouTube video (max 15 min by default) |
+| `$qr <text>` | QR code from text or a link (alias: `$createqr`). Or reply to a message with `$qr`. |
+| `$ascii [@person] [width] [invert]` + image | Turns a picture, or someone's avatar, into ASCII art (.txt). Attach the image, reply to a message with one, or mention a person. Width 20–300 characters (default 100). Animated GIFs become animated ASCII art. |
+| `$asciiimage [smooth\|blocks\|text] [invert]` + .txt | Turns an ASCII art .txt (or a code block you reply to) back into a black-and-white picture, or a GIF for animations (alias: `$fromascii`). |
+| `$mp3 <YouTube link>` | MP3 of a single YouTube video (max 15 min by default). Or reply to a message with a link. |
 | `$prompt` / `$compliment` / `$random` / `$fuckyou` | A random art prompt / compliment / random line / swear |
 | `$addprompt <text>` / `$addcompliment` / `$addrandom` / `$addswear` | Teach George something new |
 | `$content list <category> [page]` | Show what George has learned, with `#id`s |
@@ -34,6 +34,19 @@ Prefix commands ignore upper/lower case, so the old spellings (`$Meme`, `$Mp3`,
 | `$ytdlp` | Owners only: check for a yt-dlp update now |
 
 What people teach George is **shared between all servers** he's in.
+
+### Right-click menu
+
+Right-click (on phones: long-press) a message → **Apps**:
+
+| Entry | What it does |
+|---|---|
+| **Convert to MP3** | MP3 of the YouTube link in that message |
+| **Make QR code** | QR code of the message text (or of its attachment / the message link) |
+| **Make ASCII art** | ASCII art of the picture in that message |
+| **ASCII art to picture** | Picture from the .txt or code block in that message |
+
+Right-click a **person** → **Apps** → **ASCII avatar** turns their avatar into ASCII art.
 
 ---
 
@@ -114,6 +127,10 @@ George tells you at startup if ffmpeg or Deno is missing. Without ffmpeg, only
   - `blocks`: the same as sharp pixel blocks
   - `text`: the characters themselves, drawn in a monospace font
 - Tip: reply to George's `.txt` with `$asciiimage` to get the picture back.
+- `$ascii @person` uses someone's avatar. Animated avatars and GIFs become **animated ASCII
+  art**: George sends a `.txt` with all frames (each starting with a line like
+  `=== frame 2/12, 80 ms ===`) plus an animated GIF of it. `$asciiimage` turns such a
+  `.txt` back into an animated GIF. Long animations are reduced to 50 frames.
 
 Everything is black and white for now.
 

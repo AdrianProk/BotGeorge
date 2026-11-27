@@ -153,3 +153,67 @@ def test_unknown_style():
 def test_output_name():
     assert output_name("My Cat.photo.PNG", "-ascii.txt") == "My_Cat_photo-ascii.txt"
     assert output_name("???.txt", ".png") == "george.png"
+
+
+# -- animations --------------------------------------------------------------------------
+
+
+def animated_gif(frames: int = 6, duration: int = 80) -> bytes:
+    # Consecutive frames always differ (Pillow merges identical ones when saving).
+    images = []
+    for i in range(frames):
+        im = Image.new("L", (120, 60), 255)
+        x = (i * 7) % 100
+        im.paste(0, (x, 10, x + 20, 50))  # a black block moving right
+        images.append(im)
+    buf = io.BytesIO()
+    images[0].save(buf, "GIF", save_all=True, append_images=images[1:], duration=duration, loop=0)
+    return buf.getvalue()
+
+
+def test_animated_gif_becomes_frames_and_back():
+    frames = ascii_art.image_to_ascii_frames(animated_gif(), width=40)
+    assert len(frames) == 6
+    assert {f.duration_ms for f in frames} == {80}
+    # The block moves right: its first column grows frame by frame.
+    starts = [min(line.index("@") for line in f.lines if "@" in line) for f in frames]
+    assert starts == sorted(starts) and starts[0] < starts[-1]
+
+    text = ascii_art.format_frames(frames)
+    assert text.startswith("=== frame 1/6, 80 ms ===\n")
+    parsed = ascii_art.parse_frames(text)
+    assert [f.lines for f in parsed] == [f.lines for f in frames]
+
+    for style in ascii_art.STYLES:
+        rendered = ascii_art.render_ascii(text, style=style)
+        gif = Image.open(io.BytesIO(rendered.data))
+        assert rendered.extension == ".gif" and rendered.frames == 6
+        assert gif.n_frames == 6
+        assert gif.info["duration"] == 80
+
+
+def test_long_animations_are_thinned_out_keeping_total_time():
+    frames = ascii_art.image_to_ascii_frames(animated_gif(frames=120, duration=30), width=20)
+    assert len(frames) == ascii_art.MAX_FRAMES
+    assert sum(f.duration_ms for f in frames) == 120 * 30
+
+
+def test_animation_size_is_capped():
+    frames = ascii_art.image_to_ascii_frames(animated_gif(frames=50), width=300)
+    total = sum(len(f.lines) * max((len(line) for line in f.lines), default=0) for f in frames)
+    assert total <= ascii_art.MAX_ANIMATION_CHARS
+
+
+def test_frames_keep_leading_blank_rows():
+    text = "=== frame 1/2, 50 ms ===\n\n\n  @\n=== frame 2/2, 50 ms ===\n  @\n"
+    first, second = ascii_art.parse_frames(text)
+    assert first.lines == ["", "", "  @"]
+    assert second.lines == ["  @"]
+    # Blank rows at the end of a frame are kept too (the art may sit at the top).
+    third = ascii_art.parse_frames("=== frame 1/1, 50 ms ===\n@\n\n\n")[0]
+    assert third.lines == ["@", "", ""]
+
+
+def test_static_image_is_a_single_png():
+    rendered = ascii_art.render_ascii("@@\n..")
+    assert rendered.extension == ".png" and rendered.frames == 1

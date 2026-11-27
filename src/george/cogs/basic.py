@@ -49,7 +49,13 @@ class Basic(commands.Cog):
         prefix = self.bot.settings.command_prefix
         embed = discord.Embed(
             title="My commands",
-            description=f"Use them with `{prefix}` (e.g. `{prefix}meme`) or as slash commands (`/meme`).",
+            description=(
+                f"Use them with `{prefix}` (e.g. `{prefix}meme`) or as slash commands (`/meme`).\n"
+                f"Many also work as a **reply**: answer a message with `{prefix}mp3`, `{prefix}qr`, "
+                f"`{prefix}ascii` or `{prefix}asciiimage`.\n"
+                "**Right-click** a message → *Apps*: Convert to MP3 · Make QR code · Make ASCII art · "
+                "ASCII art to picture. Right-click a person → *Apps*: ASCII avatar."
+            ),
             colour=discord.Colour.dark_grey(),
         )
         for cog_name, cog in sorted(self.bot.cogs.items()):
