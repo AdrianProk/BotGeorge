@@ -57,3 +57,19 @@ def test_env_token_wins_over_legacy_file(tmp_path):
     (tmp_path / "token.json").write_text(json.dumps({"discordToken": "legacy"}))
     s = load_settings({"DATA_DIR": str(tmp_path), "DISCORD_TOKEN": "env"})
     assert s.discord_token == "env"
+
+
+def test_ffmpeg_path_alias_and_winget_detection(tmp_path, monkeypatch):
+    import george.config as config
+
+    s = load_settings({"DISCORD_TOKEN": "x", "DATA_DIR": str(tmp_path), "FFMPEG_PATH": "C:/ff"})
+    assert s.ffmpeg_location == "C:/ff"
+
+    monkeypatch.setattr(config.shutil, "which", lambda name: None)  # not on PATH
+    winget_bin = tmp_path / "Microsoft/WinGet/Packages/Gyan.FFmpeg_abc/ffmpeg-8.0-full_build/bin"
+    winget_bin.mkdir(parents=True)
+    (winget_bin / "ffmpeg.exe").write_bytes(b"")
+    s = load_settings(
+        {"DISCORD_TOKEN": "x", "DATA_DIR": str(tmp_path), "LOCALAPPDATA": str(tmp_path)}
+    )
+    assert s.ffmpeg_location == str(winget_bin)

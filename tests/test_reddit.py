@@ -104,3 +104,70 @@ async def test_listing_failure_returns_empty(session, monkeypatch):
 
     monkeypatch.setattr(service, "_auth_headers", boom)
     assert await service._listing("meme") == []
+
+
+def test_meme_api_posts_are_converted_and_filtered():
+    from george.services.reddit import meme_api_to_posts
+
+    payload = {
+        "count": 3,
+        "memes": [
+            {
+                "postLink": "https://redd.it/abc123",
+                "subreddit": "meme",
+                "title": "ok",
+                "url": "https://i.redd.it/abc.png",
+                "nsfw": False,
+            },
+            {
+                "postLink": "https://redd.it/nsfw99",
+                "subreddit": "meme",
+                "title": "nope",
+                "url": "https://i.redd.it/n.jpg",
+                "nsfw": True,
+            },
+            {
+                "postLink": "https://redd.it/txt",
+                "subreddit": "meme",
+                "title": "link",
+                "url": "https://example.com/page",
+                "nsfw": False,
+            },
+        ],
+    }
+    media = [extract_media(p) for p in meme_api_to_posts(payload)]
+    assert media[0].post_id == "abc123"
+    assert media[0].url == "https://i.redd.it/abc.png"
+    assert media[0].subreddit == "meme"
+    assert media[1].nsfw is True
+    assert media[2] is None
+
+
+async def test_listing_uses_meme_api_without_oauth(session, monkeypatch):
+    import george.services.reddit as reddit
+
+    async def gimme(request):
+        assert request.match_info["sub"] == "meme"
+        return web.json_response(
+            {
+                "memes": [
+                    {
+                        "postLink": "https://redd.it/x1",
+                        "subreddit": "meme",
+                        "title": "t",
+                        "url": "https://i.redd.it/x1.jpg",
+                        "nsfw": False,
+                    }
+                ]
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/gimme/{sub}/50", gimme)
+    async with TestServer(app) as server:
+        monkeypatch.setattr(
+            reddit, "MEME_API_URL", str(server.make_url("/gimme/")) + "{subreddit}/50"
+        )
+        service = RedditService(session, user_agent="test")
+        posts = await service._listing("meme")
+    assert [p["id"] for p in posts] == ["x1"]

@@ -62,7 +62,7 @@ Open `.env` and set at least `DISCORD_TOKEN`. Recommended extras:
 | `OWNER_IDS` | Your Discord user ID. Owners can remove any entry. |
 | `GUILD_IDS` | Your server IDs. Slash commands then show up instantly. |
 | `OWNER_LOG_CHANNEL_ID` | A private channel where George reports new entries, removals and errors. |
-| `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` | Optional. More reliable memes ([create a "script" app](https://www.reddit.com/prefs/apps)). |
+| `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` | Optional. Without them memes come from meme-api.com, because Reddit blocks anonymous requests. With them George reads Reddit directly ([create a "script" app](https://www.reddit.com/prefs/apps)). |
 
 All options with explanations are in [`.env.example`](.env.example).
 (To copy IDs, enable *Developer Mode* in Discord: Settings → Advanced.)

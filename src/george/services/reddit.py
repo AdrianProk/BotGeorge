@@ -1,9 +1,13 @@
 """Random memes from Reddit.
 
-Fetches the `hot` listing of a subreddit (cached for a few minutes), filters it
-to safe, directly downloadable images/GIFs, and downloads one with a size cap.
-Uses Reddit OAuth (app-only) when REDDIT_CLIENT_ID/SECRET are configured,
-otherwise the public JSON endpoints.
+Fetches posts of a subreddit (cached for a few minutes), filters them to safe,
+directly downloadable images/GIFs, and downloads one with a size cap.
+
+Sources:
+* Reddit OAuth (app-only) when REDDIT_CLIENT_ID/SECRET are configured: the
+  subreddit's `hot` listing, straight from Reddit.
+* Otherwise meme-api.com, a free proxy that returns random posts of a subreddit.
+  Reddit blocks anonymous JSON requests (HTTP 403 / login redirect).
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ MEDIA_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4")
 LISTING_TTL_S = 600
 SUBREDDIT_ATTEMPTS = 3
 DOWNLOAD_ATTEMPTS = 3
+MEME_API_URL = "https://meme-api.com/gimme/{subreddit}/50"
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +109,26 @@ def extract_media(post: dict[str, Any]) -> MediaCandidate | None:
         permalink="https://www.reddit.com" + str(post.get("permalink", "")),
         nsfw=bool(post.get("over_18")),
     )
+
+
+def meme_api_to_posts(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert a meme-api.com response into Reddit-style post dicts for `extract_media`."""
+    posts = []
+    for meme in payload.get("memes") or []:
+        link = str(meme.get("postLink") or "")
+        path = urlparse(link).path
+        posts.append(
+            {
+                "id": path.rstrip("/").rsplit("/", 1)[-1] or str(meme.get("url", "")),
+                "subreddit": meme.get("subreddit", ""),
+                "title": meme.get("title", ""),
+                "url": meme.get("url", ""),
+                "over_18": bool(meme.get("nsfw")),
+                "permalink": path,
+                "is_self": False,
+            }
+        )
+    return posts
 
 
 class RedditService:
@@ -181,26 +206,33 @@ class RedditService:
         if cached and time.monotonic() - cached[0] < LISTING_TTL_S:
             return cached[1]
 
-        base = "https://oauth.reddit.com" if self.uses_oauth else "https://www.reddit.com"
-        suffix = "" if self.uses_oauth else ".json"
-        url = f"{base}/r/{quote(sub)}/hot{suffix}"
         try:
-            headers = await self._auth_headers()
-            async with self._session.get(
-                url,
-                params={"limit": "100", "raw_json": "1"},
-                headers=headers,
-                timeout=self._timeout,
-            ) as resp:
-                if resp.status != 200:
-                    log.warning("Reddit listing r/%s returned HTTP %s", sub, resp.status)
-                    return []
-                payload = await resp.json()
+            if self.uses_oauth:
+                async with self._session.get(
+                    f"https://oauth.reddit.com/r/{quote(sub)}/hot",
+                    params={"limit": "100", "raw_json": "1"},
+                    headers=await self._auth_headers(),
+                    timeout=self._timeout,
+                ) as resp:
+                    if resp.status != 200:
+                        log.warning("Reddit listing r/%s returned HTTP %s", sub, resp.status)
+                        return []
+                    payload = await resp.json()
+                posts = [c.get("data", {}) for c in payload.get("data", {}).get("children", [])]
+            else:
+                async with self._session.get(
+                    MEME_API_URL.format(subreddit=quote(sub)),
+                    headers=self._headers,
+                    timeout=self._timeout,
+                ) as resp:
+                    if resp.status != 200:
+                        log.warning("meme-api r/%s returned HTTP %s", sub, resp.status)
+                        return []
+                    posts = meme_api_to_posts(await resp.json(content_type=None))
         except (aiohttp.ClientError, TimeoutError, ValueError, KeyError) as exc:
-            log.warning("Reddit listing r/%s failed: %r", sub, exc)
+            log.warning("Meme listing r/%s failed: %r", sub, exc)
             return []
 
-        posts = [child.get("data", {}) for child in payload.get("data", {}).get("children", [])]
         self._listings[sub] = (time.monotonic(), posts)
         return posts
 

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import glob
 import json
 import logging
 import os
+import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -122,6 +124,28 @@ def _optional_int(raw: str | None, name: str) -> int | None:
         raise ConfigError(f"{name} must be a numeric ID") from exc
 
 
+def _find_ffmpeg(env: Mapping[str, str]) -> str | None:
+    """Folder that contains ffmpeg, or None to let yt-dlp use PATH.
+
+    Order: FFMPEG_LOCATION, FFMPEG_PATH, PATH, then the folder `winget install
+    Gyan.FFmpeg` uses on Windows (PATH may be stale there until the next login).
+    """
+    configured = env.get("FFMPEG_LOCATION") or env.get("FFMPEG_PATH")
+    if configured:
+        return configured
+    if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        return None
+    local_appdata = env.get("LOCALAPPDATA")
+    if local_appdata:
+        pattern = str(
+            Path(local_appdata) / "Microsoft" / "WinGet" / "Packages" / "Gyan.FFmpeg*" / "*" / "bin"
+        )
+        for folder in sorted(glob.glob(pattern), reverse=True):
+            if (Path(folder) / "ffmpeg.exe").is_file():
+                return folder
+    return None
+
+
 def _legacy_token(data_dir: Path) -> str | None:
     """Support the old `data/token.json` file for one release."""
     path = data_dir / "token.json"
@@ -177,7 +201,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         mp3_max_duration_s=_int(env.get("MP3_MAX_DURATION_S"), 15 * 60, "MP3_MAX_DURATION_S"),
         mp3_max_concurrent=_int(env.get("MP3_MAX_CONCURRENT"), 2, "MP3_MAX_CONCURRENT"),
         mp3_job_timeout_s=_int(env.get("MP3_JOB_TIMEOUT_S"), 600, "MP3_JOB_TIMEOUT_S", minimum=30),
-        ffmpeg_location=env.get("FFMPEG_LOCATION") or None,
+        ffmpeg_location=_find_ffmpeg(env),
         ytdlp_auto_update=_bool(env.get("YTDLP_AUTO_UPDATE"), True),
         ytdlp_update_interval_h=_int(
             env.get("YTDLP_UPDATE_INTERVAL_H"), 6, "YTDLP_UPDATE_INTERVAL_H"

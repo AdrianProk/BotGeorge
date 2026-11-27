@@ -25,3 +25,6 @@ build/
 prototyping/*.csv
 prototyping/*.png
 prototyping/*.pdf
+
+# Local music downloads
+/musik
